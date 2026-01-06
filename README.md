@@ -90,3 +90,28 @@ uhd_find_devices
 
 - gr-ntsc-rc: https://github.com/lscardoso/gr-ntsc-rc
 - ANTSDR: MicroPhase Technology
+
+## Legal Disclaimer
+
+**IMPORTANT: READ BEFORE USE**
+
+This software is designed for receiving and decoding analog video signals in the 5.8 GHz ISM band, commonly used for First Person View (FPV) drone operations. While receiving and decoding analog RF signals is generally legal in most jurisdictions, users are solely responsible for:
+
+- Complying with all applicable local, state, federal, and international laws and regulations
+- Ensuring proper authorization before monitoring any communications
+- Understanding that monitoring transmissions you are not authorized to receive may be illegal in your jurisdiction
+- Obtaining necessary licenses or permissions required by your local regulatory authority
+- Using appropriate frequencies and power levels in accordance with local regulations
+
+**The authors, contributors, and maintainers of this software:**
+- Make NO WARRANTIES, express or implied, regarding this software
+- Accept NO RESPONSIBILITY for any use, misuse, or consequences of using this software
+- Accept NO LIABILITY for any legal violations, damages, or harm resulting from use of this software
+- Provide this software "AS IS" without any guarantee of fitness for any particular purpose
+
+**By using this software, you acknowledge that:**
+- You are solely responsible for your actions and any consequences
+- You will use this software only in compliance with all applicable laws
+- The authors bear no responsibility for your use of this software
+
+**USE AT YOUR OWN RISK.**
