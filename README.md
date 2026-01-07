@@ -6,7 +6,7 @@ NTSC 5.8 GHz FPV video receiver and scanner for ANTSDR E200 using GNU Radio.
 
 - ANTSDR configured with **UHD firmware** 
 - GNU Radio and UHD drivers (pre-installed on WarDragon)
-- Specified fork of gr-ntsc-rc
+- Specified PR of gr-ntsc-rc
 
 ## Installation
 ```bash
