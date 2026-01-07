@@ -11,7 +11,7 @@ NTSC 5.8 GHz FPV video receiver and scanner for ANTSDR E200 using GNU Radio.
 ## Installation
 ```bash
 # Clone gr-ntsc-rc decoder module
-git clone git@github.com:lscardoso/gr-ntsc-rc.git
+git clone https://github.com/lscardoso/gr-ntsc-rc.git
 cd gr-ntsc-rc
 git fetch origin pull/6/head:pr6
 git checkout pr6
