@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_DIR=~/dragon-fpv-decoder/
+PROJECT_DIR=~/dragon-fpv-decoder
 GRC_FILE="$PROJECT_DIR/NTSC_Video_5GHz_RX.grc"
 PY_FILE="$PROJECT_DIR/top_block.py"
 SCAN_LOG="$PROJECT_DIR/scan_log.txt"
@@ -35,7 +35,7 @@ SCAN_ORDER=(
     L1 L2 L3 L4 L5 L6 L7 L8
 )
 
-DECODER_PID=""
+TB_INSTANCE=""
 SCAN_ACTIVE=0
 SCAN_DWELL_TIME=3
 CURRENT_FREQ=""
@@ -46,7 +46,7 @@ create_fifo() {
 }
 
 kill_decoder_clean() {
-    pkill -9 -f "top_block.py" 2>/dev/null
+    pkill -9 -f "top_block.py" >/dev/null 2>&1
     sleep 0.5
     
     if pgrep -f "top_block.py" >/dev/null; then
@@ -62,12 +62,11 @@ cleanup() {
     echo -e "\n[INFO] Shutting down..."
     SCAN_ACTIVE=0
     
-    pkill -9 -f "top_block.py" 2>/dev/null
-    sleep 0.5
+    if [[ -n "$TB_INSTANCE" ]]; then
+        kill -9 "$TB_INSTANCE" 2>/dev/null
+    fi
     
-    for pid in $(pgrep -f "top_block.py"); do
-        kill -9 "$pid" 2>/dev/null
-    done
+    pkill -9 -f "top_block.py" >/dev/null 2>&1
     
     rm -f "$FIFO"
     echo "[INFO] Cleanup complete"
@@ -79,26 +78,24 @@ trap cleanup EXIT INT TERM
 set_frequency() {
     local freq_mhz=$1
     local channel_name=$2
-    local freq_hz="${freq_mhz}e6"
     
-    pkill -9 -f "top_block.py" 2>/dev/null
-    sleep 0.5
+    if [[ -n "$TB_INSTANCE" ]]; then
+        kill -9 "$TB_INSTANCE" 2>/dev/null
+    fi
+    pkill -9 -f "top_block.py" >/dev/null 2>&1
+    sleep 0.3
     
-    sed -i "s/frequency_carrier = frequency_carrier = [0-9.]*e[0-9]*/frequency_carrier = frequency_carrier = ${freq_hz}/" "$GRC_FILE"
+    # Write frequency to temp file
+    echo "${freq_mhz}e6" > /tmp/fpv_current_freq
     
     cd "$PROJECT_DIR"
-    grcc NTSC_Video_5GHz_RX.grc &>/dev/null
-    
-    sed -i "s/input('Press Enter to quit: ')/time.sleep(999999)/" "$PY_FILE"
-    
-    export DISPLAY=:0
-    python3 "$PY_FILE" >/dev/null 2>&1 &
-    DECODER_PID=$!
+    DISPLAY=:0 python3 "$PY_FILE" >/dev/null 2>&1 &
+    TB_INSTANCE=$!
     
     CURRENT_FREQ=$freq_mhz
     CURRENT_CHANNEL=$channel_name
     
-    echo "[$(date +%H:%M:%S)] Channel $channel_name ($freq_mhz MHz) - PID: $DECODER_PID"
+    echo "[$(date +%H:%M:%S)] Channel $channel_name ($freq_mhz MHz) - PID: $TB_INSTANCE"
     echo "$(date +%Y-%m-%d_%H:%M:%S),$channel_name,$freq_mhz" >> "$SCAN_LOG"
 }
 

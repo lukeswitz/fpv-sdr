@@ -32,12 +32,19 @@ class top_block(gr.top_block):
 
     def __init__(self):
         gr.top_block.__init__(self, "Top Block", catch_exceptions=True)
+        
+        # Read frequency from file
+        try:
+            with open('/tmp/fpv_current_freq', 'r') as f:
+                frequency_carrier = float(f.read().strip())
+        except:
+            frequency_carrier = 5725e6
 
         ##################################################
         # Variables
         ##################################################
         self.samp_rate = samp_rate = 10e6
-        self.frequency_carrier = frequency_carrier = 5725e6
+        self.frequency_carrier = frequency_carrier
         self.bandwidth = bandwidth = 5e6
 
         ##################################################
@@ -120,25 +127,26 @@ class top_block(gr.top_block):
 
 def main(top_block_cls=top_block, options=None):
     tb = top_block_cls()
-
+    
     def sig_handler(sig=None, frame=None):
         tb.stop()
         tb.wait()
-
         sys.exit(0)
-
+        
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
-
+    
     tb.start()
-
+    
     try:
-        time.sleep(999999)
-    except EOFError:
+        while True:
+            time.sleep(1)
+    except (EOFError, KeyboardInterrupt, Exception):
         pass
+        
     tb.stop()
     tb.wait()
-
-
+    
+    
 if __name__ == '__main__':
     main()
