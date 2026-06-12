@@ -9,11 +9,11 @@ PYTHON="${FPV_PYTHON:-python3}"
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
 SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
-DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-10e6}"
+DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-20e6}"
 ROTATE="${FPV_ROTATE:-0}"
 CONTRAST="${FPV_CONTRAST:-0.8}"
 MARGIN="${FPV_MARGIN:-6}"
-SETTLE="${FPV_SETTLE:-0.4}"
+SETTLE="${FPV_SETTLE:-0.2}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
@@ -182,7 +182,7 @@ sweep_channels() {
     local errf="/tmp/fpv_sweep.err"
     "$PYTHON" "$DETECT_PY" \
         --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
-        --settle "$SETTLE" --margin "$MARGIN" --refine-dwell 0 \
+        --settle "$SETTLE" --margin "$MARGIN" --localize-dwell 0 \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         "${tokens[@]}" 2>"$errf" \
