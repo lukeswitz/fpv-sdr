@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: GPL-3.0
 
+import sys
 import math
 
-UHD_ALIASES = ('uhd', 'antsdr', 'usrp', 'b210', 'b200', 'b200mini', 'pluto')
+UHD_ALIASES = ('uhd', 'antsdr', 'usrp', 'b200', 'b210', 'b200mini', 'pluto')
 
 
 def _build_uhd(samp_rate, center_freq, gain, dev_args, antenna):
@@ -25,7 +26,7 @@ def _build_uhd(samp_rate, center_freq, gain, dev_args, antenna):
     return src, retune
 
 
-def _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna):
+def _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna, lna, vga, amp):
     try:
         from gnuradio import soapy
     except ImportError:
@@ -39,7 +40,20 @@ def _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna):
     src.set_sample_rate(0, samp_rate)
     src.set_frequency(0, center_freq)
     src.set_gain_mode(0, False)
-    src.set_gain(0, float(gain))
+
+    if driver == 'hackrf':
+        lna_db = max(0.0, min(40.0, float(gain if lna is None else lna)))
+        vga_db = max(0.0, min(62.0, float(gain if vga is None else vga)))
+        amp_db = 14.0 if amp else 0.0
+        src.set_gain(0, 'AMP', amp_db)
+        src.set_gain(0, 'LNA', lna_db)
+        src.set_gain(0, 'VGA', vga_db)
+        sys.stderr.write(
+            "[fpv] hackrf RX gains: AMP=%g LNA=%g VGA=%g (max input -5 dBm; "
+            "AMP off keeps the front-end safe)\n" % (amp_db, lna_db, vga_db))
+    else:
+        src.set_gain(0, float(gain))
+
     if antenna:
         src.set_antenna(0, antenna)
 
@@ -49,11 +63,17 @@ def _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna):
     return src, retune
 
 
-def build_source(samp_rate, center_freq, gain, sdr='uhd', dev_args='', antenna=None):
+def build_source(samp_rate, center_freq, gain, sdr='uhd', dev_args='', antenna=None,
+                 lna=None, vga=None, amp=False):
     sdr = (sdr or 'uhd').lower()
-    if sdr in UHD_ALIASES:
-        return _build_uhd(samp_rate, center_freq, gain, dev_args, antenna)
-    return _build_soapy(sdr, samp_rate, center_freq, gain, dev_args, antenna)
+    try:
+        if sdr in UHD_ALIASES:
+            return _build_uhd(samp_rate, center_freq, gain, dev_args, antenna)
+        return _build_soapy(sdr, samp_rate, center_freq, gain, dev_args, antenna, lna, vga, amp)
+    except RuntimeError as e:
+        raise SystemExit(
+            "[fpv] no '%s' device found: %s\n"
+            "      plugged in? check:  SoapySDRUtil --find   (or uhd_find_devices)" % (sdr, e))
 
 
 def quad_demod_gain(samp_rate):

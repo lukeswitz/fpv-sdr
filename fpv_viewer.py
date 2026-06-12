@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: GPL-3.0
 
+import os
 import sys
 import time
 import signal
 import argparse
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gnuradio import gr, analog, filter
 from gnuradio.filter import firdes

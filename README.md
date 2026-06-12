@@ -29,6 +29,29 @@ ping 192.168.1.10
 uhd_find_devices
 ```
 
+## macOS (Apple Silicon) + HackRF
+
+The scanner runs on macOS via Homebrew GNU Radio. `fpv_env.sh` auto-detects the
+right Python (Homebrew's GNU Radio uses its own `python@3.x`; the system `python3`
+has no bindings) and wires Homebrew's keg-isolated numpy onto the path.
+
+```bash
+brew install gnuradio soapysdr soapyhackrf hackrf bash
+hackrf_info                 # confirm the HackRF is detected
+SoapySDRUtil --find         # confirm SoapySDR sees driver=hackrf
+./fpv_scanner.sh --sdr hackrf
+```
+
+HackRF RX gains follow the official stages (`AMP` RF amp 0/+11 dB, `LNA` 0–40,
+`VGA` 0–62). **The RF amp (`AMP`) is left OFF** — HackRF's max input is −5 dBm and
+enabling the amp on a strong signal can destroy the front-end LNA. Use an external
+attenuator for very strong transmitters rather than risking the front-end.
+
+NTSC decode + the SDL video window are not yet built for Homebrew GNU Radio
+(`gnuradio.NTSC` and `video_sdl` are absent), so on macOS the scanner runs a
+**power survey** (channel + dBFS) which is enough to locate a transmitter. Full
+decode + display runs on the WarDragon/ANTSDR.
+
 ## Usage
 ```bash
 ./fpv_scanner.sh                 # ANTSDR / UHD (default)

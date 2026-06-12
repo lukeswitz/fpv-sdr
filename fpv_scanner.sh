@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-PROJECT_DIR=~/dragon-fpv-decoder
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DETECT_PY="$PROJECT_DIR/fpv_detect.py"
 VIEWER_PY="$PROJECT_DIR/fpv_viewer.py"
 SCAN_LOG="$PROJECT_DIR/scan_log.txt"
+PYTHON="${FPV_PYTHON:-python3}"
 
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
@@ -93,7 +94,7 @@ set_frequency() {
     release_sdr
 
     cd "$PROJECT_DIR" || return 1
-    DISPLAY="${DISPLAY:-:0}" python3 "$VIEWER_PY" \
+    DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
@@ -134,7 +135,7 @@ scan_channels() {
                 ;;
         esac
     done < <(
-        DISPLAY="${DISPLAY:-:0}" python3 "$DETECT_PY" \
+        DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$DETECT_PY" \
             --sdr "$SDR" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
             --power-thresh "$POWER_THRESH" --lock-thresh "$LOCK_THRESH" \
             --settle "$SETTLE" --lock-dwell "$LOCK_DWELL" --continuous \
@@ -207,7 +208,13 @@ main() {
     [[ ! -f "$DETECT_PY" ]] && { echo "[ERROR] Detector not found: $DETECT_PY"; exit 1; }
     [[ ! -f "$VIEWER_PY" ]] && { echo "[ERROR] Viewer not found: $VIEWER_PY"; exit 1; }
 
+    if [[ -f "$PROJECT_DIR/fpv_env.sh" ]]; then
+        source "$PROJECT_DIR/fpv_env.sh"
+        resolve_fpv_python || { echo "[ERROR] No Python with GNU Radio bindings; set FPV_PYTHON"; exit 1; }
+    fi
+
     echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN, samp_rate: $SAMP_RATE)"
+    echo "[INFO] Python: $PYTHON"
     echo "[INFO] Log file: $SCAN_LOG"
     echo "[INFO] No video window opens until a signal is detected — type 'scan' to begin."
 

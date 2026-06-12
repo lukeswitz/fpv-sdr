@@ -2,15 +2,24 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: GPL-3.0
 
+import os
 import sys
 import time
 import math
 import argparse
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from gnuradio import gr, blocks, analog, filter
 from gnuradio.filter import firdes
 from gnuradio.fft import window
-import gnuradio.NTSC as NTSC
+
+try:
+    import gnuradio.NTSC as NTSC
+    HAVE_NTSC = True
+except Exception:
+    NTSC = None
+    HAVE_NTSC = False
 
 from fpv_sdr import build_source, quad_demod_gain
 
@@ -26,29 +35,35 @@ class detector(gr.top_block):
         pwr_win = max(1, int(samp_rate * 0.005))
         lock_win = max(1, int(samp_rate * 0.02))
 
+        self.have_lock = HAVE_NTSC
+
+        self.dcblock = filter.dc_blocker_cc(32, True)
+        self.connect(self.src, self.dcblock)
+
         self.mag2 = blocks.complex_to_mag_squared(1)
         self.pwr_avg = blocks.moving_average_ff(pwr_win, 1.0 / pwr_win, 4000, 1)
         self.pwr_probe = blocks.probe_signal_f()
+        self.connect(self.dcblock, self.mag2, self.pwr_avg, self.pwr_probe)
 
-        self.qdemod = analog.quadrature_demod_cf(quad_demod_gain(samp_rate))
-        self.lpf = filter.fir_filter_fff(
-            1, firdes.low_pass(1, samp_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
-        self.dec = NTSC.decoder_c(samp_rate)
-        self.state_shift = blocks.add_const_ff(-1.0)
-        self.state_abs = blocks.abs_ff(1)
-        self.lock_avg = blocks.moving_average_ff(lock_win, 1.0 / lock_win, 4000, 1)
-        self.lock_probe = blocks.probe_signal_f()
-        self.null1 = blocks.null_sink(gr.sizeof_float)
-        self.null2 = blocks.null_sink(gr.sizeof_float)
-        self.null3 = blocks.null_sink(gr.sizeof_float)
+        if self.have_lock:
+            self.qdemod = analog.quadrature_demod_cf(quad_demod_gain(samp_rate))
+            self.lpf = filter.fir_filter_fff(
+                1, firdes.low_pass(1, samp_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
+            self.dec = NTSC.decoder_c(samp_rate)
+            self.state_shift = blocks.add_const_ff(-1.0)
+            self.state_abs = blocks.abs_ff(1)
+            self.lock_avg = blocks.moving_average_ff(lock_win, 1.0 / lock_win, 4000, 1)
+            self.lock_probe = blocks.probe_signal_f()
+            self.null1 = blocks.null_sink(gr.sizeof_float)
+            self.null2 = blocks.null_sink(gr.sizeof_float)
+            self.null3 = blocks.null_sink(gr.sizeof_float)
 
-        self.connect(self.src, self.mag2, self.pwr_avg, self.pwr_probe)
-        self.connect(self.src, self.qdemod, self.lpf, (self.dec, 0))
-        self.connect((self.dec, 0), self.state_shift,
-                     self.state_abs, self.lock_avg, self.lock_probe)
-        self.connect((self.dec, 1), self.null1)
-        self.connect((self.dec, 2), self.null2)
-        self.connect((self.dec, 3), self.null3)
+            self.connect(self.dcblock, self.qdemod, self.lpf, (self.dec, 0))
+            self.connect((self.dec, 0), self.state_shift,
+                         self.state_abs, self.lock_avg, self.lock_probe)
+            self.connect((self.dec, 1), self.null1)
+            self.connect((self.dec, 2), self.null2)
+            self.connect((self.dec, 3), self.null3)
 
     def retune(self, freq):
         self._retune(freq)
@@ -58,6 +73,8 @@ class detector(gr.top_block):
         return 10.0 * math.log10(p) if p > 1e-12 else -120.0
 
     def lock_metric(self):
+        if not self.have_lock:
+            return 0.0
         return self.lock_probe.level()
 
 
@@ -88,6 +105,11 @@ def main():
         sys.stderr.write("[detect] no valid channels\n")
         return 2
 
+    if not HAVE_NTSC:
+        sys.stderr.write(
+            "[detect] gnuradio.NTSC not built — power-only survey, no sync-lock "
+            "gating (build gr-ntsc-rc to enable lock confirmation)\n")
+
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna)
     tb.start()
@@ -102,7 +124,7 @@ def main():
                 time.sleep(args.settle)
                 pwr = tb.power_dbfs()
                 lock = 0
-                if pwr >= args.power_thresh:
+                if pwr >= args.power_thresh and tb.have_lock:
                     time.sleep(args.lock_dwell)
                     pwr = tb.power_dbfs()
                     lock = 1 if tb.lock_metric() >= args.lock_thresh else 0
