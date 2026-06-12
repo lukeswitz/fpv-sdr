@@ -28,7 +28,7 @@ from fpv_display import frame_sink
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
-                 frame_out='/tmp/fpv_frame.png'):
+                 frame_out='/tmp/fpv_frame.png', record_path=None):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -36,10 +36,13 @@ class viewer(gr.top_block):
         self.src, self._retune = build_source(
             samp_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna)
 
+        self.recorder = None
         if HAVE_SDL:
             self.video_sdl_sink_0 = video_sdl.sink_s(0, 360, 240, (360 * 2), (240 * 2))
+            if record_path:
+                self.recorder = frame_sink(360, 240, None, record_path=record_path)
         else:
-            self.video_sdl_sink_0 = frame_sink(360, 240, frame_out)
+            self.video_sdl_sink_0 = frame_sink(360, 240, frame_out, record_path=record_path)
         self.low_pass_filter_1 = filter.fir_filter_fff(
             1,
             firdes.low_pass(1, samp_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
@@ -54,6 +57,8 @@ class viewer(gr.top_block):
         self.connect((self.NTSC_decoder_c_0, 0), (self.NTSC_video_stream_converter_c_0, 0))
         self.connect((self.NTSC_decoder_c_0, 1), (self.NTSC_video_stream_converter_c_0, 1))
         self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.video_sdl_sink_0, 0))
+        if self.recorder is not None:
+            self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.recorder, 0))
         self.connect((self.analog_quadrature_demod_cf_0, 0), (self.low_pass_filter_1, 0))
         self.connect((self.low_pass_filter_1, 0), (self.NTSC_decoder_c_0, 0))
         if sdr.lower() in UHD_ALIASES:
@@ -101,10 +106,13 @@ def main():
                     help='where to write decoded frames when SDL is unavailable (macOS)')
     ap.add_argument('--no-window', action='store_true',
                     help='headless: decode to --frame-out only, no live window')
+    ap.add_argument('--record', default=None,
+                    help='record decoded video to this file (e.g. /tmp/fpv.mp4) via ffmpeg')
     args = ap.parse_args()
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
-                args.dev_args, args.antenna, frame_out=args.frame_out)
+                args.dev_args, args.antenna, frame_out=args.frame_out,
+                record_path=args.record)
     if not HAVE_SDL:
         sys.stderr.write("[fpv] video_sdl absent — writing frames to %s\n" % args.frame_out)
 

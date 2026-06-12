@@ -15,6 +15,7 @@ SETTLE="${FPV_SETTLE:-0.2}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
+RECORD="${FPV_RECORD:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -101,6 +102,7 @@ set_frequency() {
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
+        ${RECORD:+--record "$RECORD"} \
         ${VIEW_EXTRA} \
         >/dev/null 2>&1 &
     TB_INSTANCE=$!
@@ -189,6 +191,7 @@ show_menu() {
     echo "  gain <dB>     - Set RX gain"
     echo "  dwell <SEC>   - Time per channel during scan (default: ${SETTLE}s)"
     echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
+    echo "  record <file> - Record decoded video (e.g. 'record /tmp/fpv.mp4'); 'record' off"
     echo "  log           - Show scan log"
     echo "  quit          - Exit"
     echo "========================================="
@@ -280,6 +283,15 @@ main() {
                     echo "[INFO] Detection margin set to ${MARGIN} dB over noise floor"
                 else
                     echo "[ERROR] Invalid margin: $arg1"
+                fi
+                ;;
+            record)
+                if [[ -n "$arg1" ]]; then
+                    RECORD="$arg1"
+                    echo "[INFO] Recording to $RECORD — re-tune (set/scan) to start; 'record' alone stops"
+                else
+                    RECORD=""
+                    echo "[INFO] Recording off"
                 fi
                 ;;
             log) [[ -f "$SCAN_LOG" ]] && tail -20 "$SCAN_LOG" || echo "[INFO] No log entries" ;;
