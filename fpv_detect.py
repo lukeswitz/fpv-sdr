@@ -73,6 +73,19 @@ class detector(gr.top_block):
         p = self.pwr_probe.level()
         return 10.0 * math.log10(p) if p > 1e-12 else -120.0
 
+    def power_dbfs_avg(self, dwell, interval=0.03):
+        acc = 0.0
+        n = 0
+        end = time.time() + dwell
+        while time.time() < end:
+            time.sleep(interval)
+            acc += self.pwr_probe.level()
+            n += 1
+        if n == 0:
+            return self.power_dbfs()
+        mean = acc / n
+        return 10.0 * math.log10(mean) if mean > 1e-12 else -120.0
+
     def lock_metric(self):
         if not self.have_lock:
             return 0.0
@@ -90,6 +103,9 @@ def main():
     ap.add_argument('--lock-thresh', type=float, default=0.5)
     ap.add_argument('--margin', type=float, default=6.0,
                     help='dB above the median noise floor to call a channel a hit')
+    ap.add_argument('--refine-dwell', type=float, default=0.6,
+                    help='seconds of averaged power per hit candidate to rank '
+                         'overlapping channels (0 disables the refine pass)')
     ap.add_argument('--settle', type=float, default=0.35)
     ap.add_argument('--lock-dwell', type=float, default=0.7)
     ap.add_argument('--continuous', action='store_true')
@@ -147,6 +163,18 @@ def main():
                           key=lambda r: -r[2])
             sys.stderr.write("[detect] noise floor %.1f dBFS; %d channel(s) >= floor+%.0f dB\n"
                              % (floor, len(hits), args.margin))
+            if len(hits) > 1 and args.refine_dwell > 0:
+                refined = []
+                for name, freq, _pwr in hits:
+                    tb.retune(freq)
+                    time.sleep(args.settle)
+                    rp = tb.power_dbfs_avg(args.refine_dwell)
+                    refined.append((name, freq, rp))
+                    print("DETECT %s %.0f %.1f 0 refine" % (name, freq, rp),
+                          flush=True)
+                hits = sorted(refined, key=lambda r: -r[2])
+                sys.stderr.write("[detect] refined %d candidate(s), %.1fs avg dwell each\n"
+                                 % (len(refined), args.refine_dwell))
             for name, freq, pwr in hits:
                 print("HIT %s %.0f %.1f" % (name, freq, pwr - floor), flush=True)
                 rc = 0

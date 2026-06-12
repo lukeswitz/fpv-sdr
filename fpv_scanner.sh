@@ -182,7 +182,7 @@ sweep_channels() {
     local errf="/tmp/fpv_sweep.err"
     "$PYTHON" "$DETECT_PY" \
         --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
-        --settle "$SETTLE" --margin "$MARGIN" \
+        --settle "$SETTLE" --margin "$MARGIN" --refine-dwell 0 \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         "${tokens[@]}" 2>"$errf" \
