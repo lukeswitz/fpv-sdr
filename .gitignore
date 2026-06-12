@@ -1,0 +1,4 @@
+.code-journal.md
+__pycache__/
+*.pyc
+scan_log.txt

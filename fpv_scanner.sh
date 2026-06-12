@@ -1,10 +1,34 @@
 #!/bin/bash
 
 PROJECT_DIR=~/dragon-fpv-decoder
-GRC_FILE="$PROJECT_DIR/NTSC_Video_5GHz_RX.grc"
-PY_FILE="$PROJECT_DIR/top_block.py"
+DETECT_PY="$PROJECT_DIR/fpv_detect.py"
+VIEWER_PY="$PROJECT_DIR/fpv_viewer.py"
 SCAN_LOG="$PROJECT_DIR/scan_log.txt"
-FIFO="/tmp/fpv_scanner_cmd"
+
+SDR="${FPV_SDR:-uhd}"
+GAIN="${FPV_GAIN:-40}"
+SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
+POWER_THRESH="${FPV_POWER_THRESH:--50}"
+LOCK_THRESH="${FPV_LOCK_THRESH:-0.5}"
+SETTLE="${FPV_SETTLE:-0.35}"
+LOCK_DWELL="${FPV_LOCK_DWELL:-0.7}"
+DEV_ARGS="${FPV_DEV_ARGS:-}"
+ANTENNA="${FPV_ANTENNA:-}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --sdr) SDR="$2"; shift 2 ;;
+        --gain) GAIN="$2"; shift 2 ;;
+        --samp-rate) SAMP_RATE="$2"; shift 2 ;;
+        --power-thresh) POWER_THRESH="$2"; shift 2 ;;
+        --dev-args) DEV_ARGS="$2"; shift 2 ;;
+        --antenna) ANTENNA="$2"; shift 2 ;;
+        -h|--help)
+            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--samp-rate HZ] [--power-thresh dBFS] [--dev-args STR] [--antenna NAME]"
+            exit 0 ;;
+        *) echo "[WARN] unknown arg: $1"; shift ;;
+    esac
+done
 
 declare -A CHANNELS=(
     ["R1"]=5658 ["R2"]=5695 ["R3"]=5732 ["R4"]=5769
@@ -36,39 +60,26 @@ SCAN_ORDER=(
 )
 
 TB_INSTANCE=""
+DETECT_PID=""
 SCAN_ACTIVE=0
-SCAN_DWELL_TIME=3
 CURRENT_FREQ=""
 CURRENT_CHANNEL=""
 
-create_fifo() {
-    [[ -p "$FIFO" ]] || mkfifo "$FIFO"
-}
-
-kill_decoder_clean() {
-    pkill -9 -f "top_block.py" >/dev/null 2>&1
-    sleep 0.5
-    
-    if pgrep -f "top_block.py" >/dev/null; then
-        for pid in $(pgrep -f "top_block.py"); do
-            kill -9 "$pid" 2>/dev/null
-        done
-    fi
-    
-    DECODER_PID=""
+release_sdr() {
+    [[ -n "$DETECT_PID" ]] && kill "$DETECT_PID" 2>/dev/null
+    [[ -n "$TB_INSTANCE" ]] && kill "$TB_INSTANCE" 2>/dev/null
+    pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+    pkill -9 -f "fpv_viewer.py" >/dev/null 2>&1
+    pkill -9 -f "top_block.py"  >/dev/null 2>&1
+    DETECT_PID=""
+    TB_INSTANCE=""
+    sleep 0.3
 }
 
 cleanup() {
     echo -e "\n[INFO] Shutting down..."
     SCAN_ACTIVE=0
-    
-    if [[ -n "$TB_INSTANCE" ]]; then
-        kill -9 "$TB_INSTANCE" 2>/dev/null
-    fi
-    
-    pkill -9 -f "top_block.py" >/dev/null 2>&1
-    
-    rm -f "$FIFO"
+    release_sdr
     echo "[INFO] Cleanup complete"
     exit 0
 }
@@ -78,65 +89,101 @@ trap cleanup EXIT INT TERM
 set_frequency() {
     local freq_mhz=$1
     local channel_name=$2
-    
-    if [[ -n "$TB_INSTANCE" ]]; then
-        kill -9 "$TB_INSTANCE" 2>/dev/null
-    fi
-    pkill -9 -f "top_block.py" >/dev/null 2>&1
-    sleep 0.3
-    
-    # Write frequency to temp file
-    echo "${freq_mhz}e6" > /tmp/fpv_current_freq
-    
-    cd "$PROJECT_DIR"
-    DISPLAY=:0 python3 "$PY_FILE" >/dev/null 2>&1 &
+
+    release_sdr
+
+    cd "$PROJECT_DIR" || return 1
+    DISPLAY="${DISPLAY:-:0}" python3 "$VIEWER_PY" \
+        --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
+        ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
+        ${ANTENNA:+--antenna "$ANTENNA"} \
+        >/dev/null 2>&1 &
     TB_INSTANCE=$!
-    
+
     CURRENT_FREQ=$freq_mhz
     CURRENT_CHANNEL=$channel_name
-    
-    echo "[$(date +%H:%M:%S)] Channel $channel_name ($freq_mhz MHz) - PID: $TB_INSTANCE"
+
+    echo "[$(date +%H:%M:%S)] Viewing $channel_name ($freq_mhz MHz) [$SDR] - PID: $TB_INSTANCE"
     echo "$(date +%Y-%m-%d_%H:%M:%S),$channel_name,$freq_mhz" >> "$SCAN_LOG"
 }
 
 scan_channels() {
     SCAN_ACTIVE=1
-    echo "[INFO] Starting channel scan (${#SCAN_ORDER[@]} channels, ${SCAN_DWELL_TIME}s dwell)"
-    
-    while [[ $SCAN_ACTIVE -eq 1 ]]; do
-        for channel in "${SCAN_ORDER[@]}"; do
-            [[ $SCAN_ACTIVE -eq 0 ]] && break
-            
-            local freq=${CHANNELS[$channel]}
-            echo -e "\n[SCAN] Tuning to $channel: $freq MHz"
-            set_frequency "$freq" "$channel"
-            
-            sleep "$SCAN_DWELL_TIME"
-        done
-        
-        [[ $SCAN_ACTIVE -eq 1 ]] && echo -e "\n[INFO] Scan cycle complete, restarting..."
+    release_sdr
+
+    local tokens=() channel
+    for channel in "${SCAN_ORDER[@]}"; do
+        tokens+=("${channel}:${CHANNELS[$channel]}e6")
     done
-    
-    echo "[INFO] Scan stopped"
+
+    echo "[INFO] Scanning ${#tokens[@]} channels headless on [$SDR] — no window opens until a signal locks"
+    echo "[INFO] (type 'stop' to abort the sweep)"
+
+    local hit_name="" hit_freq=""
+    while read -r tag f1 f2 f3 _ f5; do
+        [[ $SCAN_ACTIVE -eq 0 ]] && break
+        case "$tag" in
+            DETECT)
+                local mhz
+                mhz=$(awk "BEGIN{printf \"%.0f\", $f2/1e6}")
+                printf "  %-5s %5s MHz  %7s dBFS  %s\n" "$f1" "$mhz" "$f3" "$f5"
+                ;;
+            HIT)
+                hit_name="$f1"; hit_freq="$f2"
+                break
+                ;;
+        esac
+    done < <(
+        DISPLAY="${DISPLAY:-:0}" python3 "$DETECT_PY" \
+            --sdr "$SDR" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
+            --power-thresh "$POWER_THRESH" --lock-thresh "$LOCK_THRESH" \
+            --settle "$SETTLE" --lock-dwell "$LOCK_DWELL" --continuous \
+            ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
+            ${ANTENNA:+--antenna "$ANTENNA"} \
+            "${tokens[@]}" 2>/dev/null
+    )
+
+    pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+    DETECT_PID=""
+
+    if [[ $SCAN_ACTIVE -eq 0 ]]; then
+        echo "[INFO] Scan stopped"
+        return
+    fi
+
+    if [[ -n "$hit_name" ]]; then
+        local mhz
+        mhz=$(awk "BEGIN{printf \"%.0f\", $hit_freq/1e6}")
+        echo -e "\n[SIGNAL] $hit_name locked at ${mhz} MHz — opening viewer"
+        echo "$(date +%Y-%m-%d_%H:%M:%S),HIT,$hit_name,$mhz" >> "$SCAN_LOG"
+        set_frequency "$mhz" "$hit_name"
+    else
+        echo "[INFO] No FPV signals found"
+    fi
+    SCAN_ACTIVE=0
 }
 
 stop_scan() {
     SCAN_ACTIVE=0
+    pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+    DETECT_PID=""
 }
 
 show_menu() {
     echo -e "\n========================================="
     echo "FPV Channel Scanner & Monitor"
     echo "========================================="
-    echo "Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
+    echo "SDR: $SDR  |  Gain: $GAIN  |  Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
     echo ""
     echo "Commands:"
-    echo "  scan          - Start auto-scan all channels"
-    echo "  stop          - Stop auto-scan"
-    echo "  set <CH>      - Tune to channel (e.g., 'set R6')"
-    echo "  freq <MHz>    - Tune to frequency (e.g., 'freq 5843')"
+    echo "  scan          - Headless sweep; window opens only on a locked signal"
+    echo "  stop          - Stop the sweep"
+    echo "  set <CH>      - Tune+view a channel (e.g., 'set R6')"
+    echo "  freq <MHz>    - Tune+view an exact frequency (e.g., 'freq 5843')"
     echo "  list          - Show all channels"
-    echo "  dwell <SEC>   - Set scan dwell time (default: 3s)"
+    echo "  sdr <NAME>    - Switch radio (uhd|hackrf|bladerf|...)"
+    echo "  gain <dB>     - Set RX gain"
+    echo "  dwell <SEC>   - Per-candidate lock dwell (default: ${LOCK_DWELL}s)"
     echo "  log           - Show scan log"
     echo "  quit          - Exit"
     echo "========================================="
@@ -155,22 +202,15 @@ list_channels() {
 }
 
 main() {
-    cd "$PROJECT_DIR" || { echo "[ERROR] Project directory not found"; exit 1; }
-    
-    [[ ! -f "$GRC_FILE" ]] && { echo "[ERROR] GRC file not found"; exit 1; }
-    
-    if ! grep -q "uhd_usrp_source" "$GRC_FILE"; then
-        echo "[ERROR] GRC file uses wrong driver"
-        exit 1
-    fi
-    
-    create_fifo
-    
-    echo "[INFO] FPV Scanner initialized"
+    cd "$PROJECT_DIR" || { echo "[ERROR] Project directory not found: $PROJECT_DIR"; exit 1; }
+
+    [[ ! -f "$DETECT_PY" ]] && { echo "[ERROR] Detector not found: $DETECT_PY"; exit 1; }
+    [[ ! -f "$VIEWER_PY" ]] && { echo "[ERROR] Viewer not found: $VIEWER_PY"; exit 1; }
+
+    echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN, samp_rate: $SAMP_RATE)"
     echo "[INFO] Log file: $SCAN_LOG"
-    
-    set_frequency 5725 "A8"
-    
+    echo "[INFO] No video window opens until a signal is detected — type 'scan' to begin."
+
     show_menu
     
     while true; do
@@ -197,10 +237,28 @@ main() {
                 fi
                 ;;
             list) list_channels ;;
+            sdr)
+                if [[ -n "$arg1" ]]; then
+                    stop_scan
+                    release_sdr
+                    SDR="$arg1"
+                    echo "[INFO] SDR set to $SDR"
+                else
+                    echo "[INFO] Current SDR: $SDR"
+                fi
+                ;;
+            gain)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    GAIN="$arg1"
+                    echo "[INFO] Gain set to $GAIN dB (applies on next tune/scan)"
+                else
+                    echo "[ERROR] Invalid gain: $arg1"
+                fi
+                ;;
             dwell)
-                if [[ "$arg1" =~ ^[0-9]+$ ]] && [[ $arg1 -gt 0 ]]; then
-                    SCAN_DWELL_TIME=$arg1
-                    echo "[INFO] Dwell time set to ${SCAN_DWELL_TIME}s"
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    LOCK_DWELL="$arg1"
+                    echo "[INFO] Per-candidate lock dwell set to ${LOCK_DWELL}s"
                 else
                     echo "[ERROR] Invalid dwell time: $arg1"
                 fi

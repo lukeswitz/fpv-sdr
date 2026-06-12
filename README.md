@@ -31,17 +31,27 @@ uhd_find_devices
 
 ## Usage
 ```bash
-./fpv_scanner.sh
+./fpv_scanner.sh                 # ANTSDR / UHD (default)
+./fpv_scanner.sh --sdr hackrf    # HackRF via SoapySDR
+./fpv_scanner.sh --sdr bladerf --gain 30
 ```
+
+Flags: `--sdr <name>` `--gain <dB>` `--samp-rate <Hz>` `--power-thresh <dBFS>` `--dev-args <str>` `--antenna <name>` (all also settable via `FPV_*` env vars).
+
+### How scanning works
+
+`scan` runs a **headless** sweep of all channels — **no video window opens** while it searches. Each channel is gated in two stages: RF power must cross a threshold, then the NTSC decoder must achieve sync-lock (this rejects 5.8 GHz Wi-Fi and other non-video carriers). The video window opens **only** when a channel locks. One process owns the radio at a time, so the detector hands the radio off to the viewer on a hit.
 
 ### Commands
 
-- `scan` - Auto-scan all 64 FPV channels
-- `stop` - Stop scanning
-- `set <CH>` - Tune to specific channel (e.g., `set R6`, `set A8`)
-- `freq <MHz>` - Tune to exact frequency (e.g., `freq 5843`)
+- `scan` - Headless sweep; window opens only on a locked signal
+- `stop` - Stop the sweep
+- `set <CH>` - Tune and view a specific channel (e.g., `set R6`, `set A8`)
+- `freq <MHz>` - Tune and view an exact frequency (e.g., `freq 5843`)
 - `list` - Show all available channels
-- `dwell <SEC>` - Set scan dwell time (default: 3s)
+- `sdr <NAME>` - Switch radio at runtime (`uhd`, `hackrf`, `bladerf`, …)
+- `gain <dB>` - Set RX gain
+- `dwell <SEC>` - Per-candidate lock dwell time (default: 0.7s)
 - `log` - View scan history
 - `quit` - Exit
 
@@ -58,20 +68,52 @@ uhd_find_devices
 
 **Total: 64 channels across 8 bands**
 
+## Supported SDR Hardware
+
+Decoding runs entirely on the **host CPU** in GNU Radio — the SDR only tunes, samples, and streams IQ. There is **no on-FPGA decode**, so FPGA size is irrelevant to this use case (a common misconception). Any radio that reaches 5.8 GHz and streams ~18–20 MHz of bandwidth works.
+
+| SDR | 5.8 GHz | Bandwidth / ADC | Driver | `--sdr` | Verdict |
+|-----|:------:|-----------------|--------|---------|---------|
+| ANTSDR E200 | ✅ | 56 MHz / 12-bit | UHD | `uhd` | Reference |
+| USRP B210 / B200mini | ✅ | 56 MHz / 12-bit | UHD | `uhd` | Best drop-in |
+| BladeRF 2.0 micro | ✅ | 56 MHz / 12-bit | SoapySDR | `bladerf` | Great |
+| HackRF One | ✅ | 20 MHz / 8-bit | SoapySDR | `hackrf` | Works (marginal BW; 8-bit fine for FM) |
+| ADALM-Pluto | ⚠️ hacked fw | 56 MHz / 12-bit | UHD/IIO | `uhd` | Only if already owned |
+| LimeSDR / RTL-SDR / Airspy / SDRplay | ❌ | — | — | — | Cannot reach 5.8 GHz |
+
+**HackRF note:** 20 Msps ≈ the minimum bandwidth an analog FPV FM channel occupies, so it's tight but watchable; the 8-bit ADC is a non-issue for constant-envelope FM video. SoapySDR sources (`hackrf`, `bladerf`) require **gr-soapy** plus the matching `SoapyHackRF` / `SoapyBladeRF` plugin installed.
+
+## Architecture
+
+- `fpv_scanner.sh` — interactive orchestrator (channel tables, scan/view handoff, single-radio-owner management)
+- `fpv_detect.py` — headless two-stage signal detector (RF power + NTSC sync-lock); opens no window
+- `fpv_viewer.py` — gated video viewer; opens one SDL window for one locked channel
+- `fpv_sdr.py` — shared UHD/SoapySDR source factory
+- `top_block.py` — original standalone UHD flowgraph (kept for reference; not used by the scanner)
+
 ## Features
 
 - Real-time NTSC video decoding with SDL display
-- Interactive channel scanning
+- **Signal-gated scanning** — headless detection, no blank windows; the video window opens only on a confirmed signal
+- **Two-stage presence gate** — RF power + NTSC sync-lock, rejecting Wi-Fi / non-video carriers
+- **Multi-SDR** — UHD (ANTSDR/USRP) and SoapySDR (HackRF/BladeRF) via `--sdr`
+- In-place retune during the sweep (no per-channel process restart)
 - Manual frequency tuning
-- Automatic channel switching
 - Scan logging and history
-- Clean window management
 
 ## Troubleshooting
 
-**No video window:**
+**No video window during a scan:** This is expected — the sweep is headless and a window opens only when a channel locks. Watch the per-channel `dBFS` / `LOCK` readout. If a window never opens even with a transmitter on, lower `--power-thresh` (e.g. `-60`) or raise `--gain`.
+
+**No video window at all (display issue):**
 ```bash
 export DISPLAY=:0
+```
+
+**SoapySDR device not found (`--sdr hackrf`/`bladerf`):**
+```bash
+SoapySDRUtil --find          # confirm the device is seen
+# install gr-soapy + Soapy<Driver> plugin if missing
 ```
 
 **ANTSDR not detected:**
