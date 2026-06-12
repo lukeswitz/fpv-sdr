@@ -28,7 +28,7 @@ from fpv_display import frame_sink, decoder_sink
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
-                 frame_out='/tmp/fpv_frame.png', record_path=None, live=True):
+                 frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -44,7 +44,7 @@ class viewer(gr.top_block):
             quad_demod_gain(samp_rate))
         self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate)
 
-        if sdr.lower() in UHD_ALIASES:
+        if sdr.lower() in UHD_ALIASES or not dcblock:
             self.connect((self.src, 0), (self.analog_quadrature_demod_cf_0, 0))
         else:
             self.dcblock = filter.dc_blocker_cc(32, True)
@@ -98,11 +98,14 @@ def main():
                     help='headless: decode to --frame-out only, no live window')
     ap.add_argument('--record', default=None,
                     help='record decoded video to this file (e.g. /tmp/fpv.mp4) via ffmpeg')
+    ap.add_argument('--no-dcblock', action='store_true',
+                    help='disable the zero-IF DC blocker on the decode path')
     args = ap.parse_args()
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
                 args.dev_args, args.antenna, frame_out=args.frame_out,
-                record_path=args.record, live=(not args.no_window))
+                record_path=args.record, live=(not args.no_window),
+                dcblock=(not args.no_dcblock))
 
     def sig_handler(sig=None, frame=None):
         tb.stop()

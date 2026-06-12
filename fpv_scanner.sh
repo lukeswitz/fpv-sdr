@@ -9,9 +9,9 @@ PYTHON="${FPV_PYTHON:-python3}"
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
 SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
-DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-20e6}"
+DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-10e6}"
 MARGIN="${FPV_MARGIN:-6}"
-SETTLE="${FPV_SETTLE:-0.2}"
+SETTLE="${FPV_SETTLE:-0.4}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
@@ -253,7 +253,7 @@ main() {
         read -r cmd arg1 arg2
         
         case "$cmd" in
-            scan) scan_channels & ;;
+            scan) scan_channels ;;
             sweep) sweep_channels ;;
             stop) stop_scan ;;
             set)
