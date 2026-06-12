@@ -99,7 +99,8 @@ class frame_sink(gr.sync_block):
 
 class decoder_sink(gr.sync_block):
     def __init__(self, width=360, height=240, out_path=None, every=15,
-                 record_path=None, record_fps=30, live=False, title='Dragon FPV'):
+                 record_path=None, record_fps=30, live=False, title='Dragon FPV',
+                 rotate=0):
         gr.sync_block.__init__(self, name='fpv_decoder_sink',
                                in_sig=[np.float32, np.float32, np.float32], out_sig=[])
         self.w = int(width)
@@ -113,6 +114,13 @@ class decoder_sink(gr.sync_block):
         self.frame_count = 0
         self.closed = False
 
+        self.rotate = int(rotate) % 360
+        self._rot_k = {0: 0, 90: 3, 180: 2, 270: 1}.get(self.rotate, 0)
+        if self.rotate in (90, 270):
+            ow, oh = self.h, self.w
+        else:
+            ow, oh = self.w, self.h
+
         self._live = None
         self._rec = None
         self._latest = None
@@ -120,7 +128,7 @@ class decoder_sink(gr.sync_block):
         self._run = True
         self._writer = None
 
-        size = '%dx%d' % (self.w, self.h)
+        size = '%dx%d' % (ow, oh)
         if live:
             self._live = subprocess.Popen(
                 ['ffplay', '-hide_banner', '-loglevel', 'error', '-autoexit',
@@ -176,7 +184,11 @@ class decoder_sink(gr.sync_block):
         return True
 
     def _emit(self):
-        data = self._frame.tobytes()
+        if self._rot_k:
+            img = np.ascontiguousarray(np.rot90(self._frame, self._rot_k))
+        else:
+            img = self._frame
+        data = img.tobytes()
         if self._live is not None:
             with self._lock:
                 self._latest = data
@@ -189,7 +201,7 @@ class decoder_sink(gr.sync_block):
         if self.out_path and self.frame_count % self.every == 0:
             tmp = self.out_path + '.tmp'
             try:
-                Image.fromarray(self._frame, mode='L').save(tmp, format='PNG')
+                Image.fromarray(img, mode='L').save(tmp, format='PNG')
                 os.replace(tmp, self.out_path)
             except OSError:
                 pass

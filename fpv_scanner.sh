@@ -8,8 +8,9 @@ PYTHON="${FPV_PYTHON:-python3}"
 
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
-SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
+SAMP_RATE="${FPV_SAMP_RATE:-20e6}"
 DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-10e6}"
+ROTATE="${FPV_ROTATE:-0}"
 MARGIN="${FPV_MARGIN:-6}"
 SETTLE="${FPV_SETTLE:-0.4}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
@@ -100,6 +101,7 @@ set_frequency() {
     cd "$PROJECT_DIR" || return 1
     DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
+        --rotate "$ROTATE" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         ${RECORD:+--record "$RECORD"} \
@@ -213,6 +215,7 @@ show_menu() {
     echo "  dwell <SEC>   - Time per channel during scan (default: ${SETTLE}s)"
     echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
     echo "  record <file> - Record decoded video (e.g. 'record /tmp/fpv.mp4'); 'record' off"
+    echo "  rotate <deg>  - Rotate video 0|90|180|270 (default: ${ROTATE})"
     echo "  log           - Show scan log"
     echo "  quit          - Exit"
     echo "========================================="
@@ -314,6 +317,15 @@ main() {
                 else
                     RECORD=""
                     echo "[INFO] Recording off"
+                fi
+                ;;
+            rotate)
+                if [[ "$arg1" =~ ^(0|90|180|270)$ ]]; then
+                    ROTATE="$arg1"
+                    echo "[INFO] Rotation set to ${ROTATE} deg (applies on next tune)"
+                    [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
+                else
+                    echo "[ERROR] rotate must be 0, 90, 180 or 270"
                 fi
                 ;;
             log) [[ -f "$SCAN_LOG" ]] && tail -20 "$SCAN_LOG" || echo "[INFO] No log entries" ;;

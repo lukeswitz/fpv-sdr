@@ -28,7 +28,8 @@ from fpv_display import frame_sink, decoder_sink
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
-                 frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True):
+                 frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
+                 rotate=0):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -68,7 +69,8 @@ class viewer(gr.top_block):
                 self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.recorder, 0))
         else:
             self.decoder_sink_0 = decoder_sink(
-                360, 240, frame_out, record_path=record_path, live=live, title=title)
+                360, 240, frame_out, record_path=record_path, live=live, title=title,
+                rotate=rotate)
             self.null_state = blocks.null_sink(gr.sizeof_float)
             self.connect((self.NTSC_decoder_c_0, 0), self.null_state)
             self.connect((self.NTSC_decoder_c_0, 1), (self.decoder_sink_0, 0))
@@ -87,7 +89,7 @@ class viewer(gr.top_block):
 def main():
     ap = argparse.ArgumentParser(description="Gated FPV video viewer (one channel)")
     ap.add_argument('--sdr', default='uhd')
-    ap.add_argument('--samp-rate', type=float, default=10e6)
+    ap.add_argument('--samp-rate', type=float, default=20e6)
     ap.add_argument('--gain', type=float, default=40.0)
     ap.add_argument('--dev-args', default='')
     ap.add_argument('--antenna', default=None)
@@ -100,12 +102,14 @@ def main():
                     help='record decoded video to this file (e.g. /tmp/fpv.mp4) via ffmpeg')
     ap.add_argument('--no-dcblock', action='store_true',
                     help='disable the zero-IF DC blocker on the decode path')
+    ap.add_argument('--rotate', type=int, default=0, choices=[0, 90, 180, 270],
+                    help='rotate the displayed video by this many degrees')
     args = ap.parse_args()
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
                 args.dev_args, args.antenna, frame_out=args.frame_out,
                 record_path=args.record, live=(not args.no_window),
-                dcblock=(not args.no_dcblock))
+                dcblock=(not args.no_dcblock), rotate=args.rotate)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()
