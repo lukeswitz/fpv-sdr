@@ -47,10 +47,32 @@ HackRF RX gains follow the official stages (`AMP` RF amp 0/+11 dB, `LNA` 0–40,
 enabling the amp on a strong signal can destroy the front-end LNA. Use an external
 attenuator for very strong transmitters rather than risking the front-end.
 
-NTSC decode + the SDL video window are not yet built for Homebrew GNU Radio
-(`gnuradio.NTSC` and `video_sdl` are absent), so on macOS the scanner runs a
-**power survey** (channel + dBFS) which is enough to locate a transmitter. Full
-decode + display runs on the WarDragon/ANTSDR.
+Homebrew GNU Radio ships neither the `gnuradio.NTSC` out-of-tree module nor
+`video_sdl`. Build the decoder once, into your user prefix:
+
+```bash
+brew install cmake pybind11
+git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc
+git fetch origin pull/6/head:pr6 && git checkout pr6
+PY=/opt/homebrew/opt/python@3.14/bin/python3.14            # match your brew GNU Radio python
+export PYTHONPATH=/opt/homebrew/opt/numpy/lib/python3.14/site-packages
+cmake -B build -S . -DCMAKE_PREFIX_PATH=/opt/homebrew \
+  -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+  -DPYTHON_EXECUTABLE=$PY -DGR_PYTHON_DIR=$HOME/.local/lib/python3.14/site-packages
+cmake --build build -j4 && cmake --install build
+```
+
+`fpv_env.sh` adds `~/.local/lib/python3.x/site-packages` to the path automatically.
+`video_sdl` is still absent, so the viewer renders frames in a live matplotlib
+window (`fpv_display.frame_sink`) instead of the SDL sink:
+
+```bash
+"$PYTHON" fpv_viewer.py --sdr hackrf --gain 40 --samp-rate 10e6 --freq 5725e6
+```
+
+Note: HackRF captures ~10 MHz of the ~18 MHz analog FPV signal (the decoder runs
+at 10 Msps), so tune to the transmitter's true center for the best image. The
+WarDragon/ANTSDR captures the full signal and decodes cleaner.
 
 ## Usage
 ```bash

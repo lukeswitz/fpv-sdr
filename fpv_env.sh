@@ -30,6 +30,8 @@ resolve_fpv_python() {
                     fi
                 done
             fi
+            local oot="${HOME}/.local/lib/${grver}/site-packages"
+            [[ -d "$oot" ]] && export PYTHONPATH="${oot}${PYTHONPATH:+:$PYTHONPATH}"
             if "$cand" -c "import gnuradio.gr" >/dev/null 2>&1; then
                 PYTHON="$cand"
                 return 0

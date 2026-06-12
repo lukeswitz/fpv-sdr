@@ -67,14 +67,17 @@ CURRENT_FREQ=""
 CURRENT_CHANNEL=""
 
 release_sdr() {
-    [[ -n "$DETECT_PID" ]] && kill "$DETECT_PID" 2>/dev/null
-    [[ -n "$TB_INSTANCE" ]] && kill "$TB_INSTANCE" 2>/dev/null
+    [[ -n "$DETECT_PID" ]] && kill -TERM "$DETECT_PID" 2>/dev/null
+    [[ -n "$TB_INSTANCE" ]] && kill -TERM "$TB_INSTANCE" 2>/dev/null
+    pkill -TERM -f "fpv_detect.py" >/dev/null 2>&1
+    pkill -TERM -f "fpv_viewer.py" >/dev/null 2>&1
+    pkill -TERM -f "top_block.py"  >/dev/null 2>&1
+    sleep 1.5
     pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
     pkill -9 -f "fpv_viewer.py" >/dev/null 2>&1
     pkill -9 -f "top_block.py"  >/dev/null 2>&1
     DETECT_PID=""
     TB_INSTANCE=""
-    sleep 0.3
 }
 
 cleanup() {

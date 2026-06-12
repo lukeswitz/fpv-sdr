@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import math
+import signal
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -112,6 +113,15 @@ def main():
 
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna)
+
+    def _clean_exit(sig=None, frame=None):
+        tb.stop()
+        tb.wait()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _clean_exit)
+    signal.signal(signal.SIGTERM, _clean_exit)
+
     tb.start()
 
     rc = 1
