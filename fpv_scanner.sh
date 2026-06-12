@@ -169,6 +169,26 @@ scan_channels() {
     SCAN_ACTIVE=0
 }
 
+sweep_channels() {
+    release_sdr
+    local tokens=() channel
+    for channel in "${SCAN_ORDER[@]}"; do
+        tokens+=("${channel}:${CHANNELS[$channel]}e6")
+    done
+    echo "[INFO] Fast RSSI sweep of ${#tokens[@]} channels on [$SDR] (no video)..."
+    local errf="/tmp/fpv_sweep.err"
+    "$PYTHON" "$DETECT_PY" \
+        --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
+        --settle "$SETTLE" --margin "$MARGIN" \
+        ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
+        ${ANTENNA:+--antenna "$ANTENNA"} \
+        "${tokens[@]}" 2>"$errf" \
+      | awk '/^DETECT/{printf "  %-5s %4.0f MHz  %7.1f dBFS\n", $2, $3/1e6, $4}' \
+      | sort -k4 -nr
+    grep "noise floor" "$errf" 2>/dev/null | sed 's/^/[INFO] /'
+    DETECT_PID=""
+}
+
 stop_scan() {
     SCAN_ACTIVE=0
     pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
@@ -183,6 +203,7 @@ show_menu() {
     echo ""
     echo "Commands:"
     echo "  scan          - Sweep all channels; opens viewer on the strongest signal"
+    echo "  sweep         - Fast RSSI survey of all channels (no video)"
     echo "  stop          - Stop the sweep"
     echo "  set <CH>      - Tune+view a channel (e.g., 'set R6')"
     echo "  freq <MHz>    - Tune+view an exact frequency (e.g., 'freq 5843')"
@@ -233,6 +254,7 @@ main() {
         
         case "$cmd" in
             scan) scan_channels & ;;
+            sweep) sweep_channels ;;
             stop) stop_scan ;;
             set)
                 if [[ -n "${CHANNELS[$arg1]}" ]]; then
