@@ -1,0 +1,14 @@
+diff --git a/lib/video_stream_converter_c_impl.cc b/lib/video_stream_converter_c_impl.cc
+index 7fa996f..ae3e974 100755
+--- a/lib/video_stream_converter_c_impl.cc
++++ b/lib/video_stream_converter_c_impl.cc
+@@ -94,7 +94,8 @@ namespace gr {
+ 
+ 
+       /*------------------------ INPUTS-------------------------*/
+-      for(int i = 0; i < d_decimation_factor * noutput_items; i++){
++      const int ninput = noutput_items * decimation();
++      for(int i = 0; i < ninput; i++){
+ 
+         // Process only on Video Transmission
+         if(in[i] == VIDEO){

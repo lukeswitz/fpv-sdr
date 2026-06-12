@@ -54,6 +54,7 @@ Homebrew GNU Radio ships neither the `gnuradio.NTSC` out-of-tree module nor
 brew install cmake pybind11
 git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc
 git fetch origin pull/6/head:pr6 && git checkout pr6
+git apply ~/dragon-fpv-decoder/patches/gr-ntsc-rc-converter-bounds.patch   # crash fix, see below
 PY=/opt/homebrew/opt/python@3.14/bin/python3.14            # match your brew GNU Radio python
 export PYTHONPATH=/opt/homebrew/opt/numpy/lib/python3.14/site-packages
 cmake -B build -S . -DCMAKE_PREFIX_PATH=/opt/homebrew \
@@ -62,9 +63,16 @@ cmake -B build -S . -DCMAKE_PREFIX_PATH=/opt/homebrew \
 cmake --build build -j4 && cmake --install build
 ```
 
+The patch fixes an out-of-bounds read in the gr-ntsc-rc video stream converter:
+it reads `1.93 × noutput` input samples from a buffer that holds only `noutput`,
+which segfaults on a marginal signal (clean ANTSDR signals get lucky and never
+crash). The macOS viewer bypasses the converter entirely — it reads the decoder's
+x/y/luma ports into a bounds-checked sink — but apply the patch when building
+gr-ntsc-rc on the **WarDragon/ANTSDR** too, so its `video_sdl` path is crash-proof.
+
 `fpv_env.sh` adds `~/.local/lib/python3.x/site-packages` to the path automatically.
-`video_sdl` is still absent, so the viewer renders frames in a live matplotlib
-window (`fpv_display.frame_sink`) instead of the SDL sink:
+`video_sdl` is still absent, so the viewer decodes the NTSC stream into a live
+ffplay window (`fpv_display.decoder_sink`) instead of the SDL sink:
 
 ```bash
 "$PYTHON" fpv_viewer.py --sdr hackrf --gain 40 --samp-rate 10e6 --freq 5725e6
