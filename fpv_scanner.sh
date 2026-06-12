@@ -8,9 +8,10 @@ PYTHON="${FPV_PYTHON:-python3}"
 
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
-SAMP_RATE="${FPV_SAMP_RATE:-20e6}"
+SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
 DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-10e6}"
 ROTATE="${FPV_ROTATE:-0}"
+CONTRAST="${FPV_CONTRAST:-0.8}"
 MARGIN="${FPV_MARGIN:-6}"
 SETTLE="${FPV_SETTLE:-0.4}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
@@ -101,7 +102,7 @@ set_frequency() {
     cd "$PROJECT_DIR" || return 1
     DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
-        --rotate "$ROTATE" \
+        --rotate "$ROTATE" --contrast "$CONTRAST" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         ${RECORD:+--record "$RECORD"} \
@@ -216,6 +217,7 @@ show_menu() {
     echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
     echo "  record <file> - Record decoded video (e.g. 'record /tmp/fpv.mp4'); 'record' off"
     echo "  rotate <deg>  - Rotate video 0|90|180|270 (default: ${ROTATE})"
+    echo "  contrast <x>  - Demod contrast; lower if frame decodes only partway (default: ${CONTRAST})"
     echo "  log           - Show scan log"
     echo "  quit          - Exit"
     echo "========================================="
@@ -326,6 +328,15 @@ main() {
                     [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
                 else
                     echo "[ERROR] rotate must be 0, 90, 180 or 270"
+                fi
+                ;;
+            contrast)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    CONTRAST="$arg1"
+                    echo "[INFO] Contrast set to ${CONTRAST} (applies on next tune)"
+                    [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
+                else
+                    echo "[ERROR] Invalid contrast: $arg1"
                 fi
                 ;;
             log) [[ -f "$SCAN_LOG" ]] && tail -20 "$SCAN_LOG" || echo "[INFO] No log entries" ;;

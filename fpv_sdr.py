@@ -39,6 +39,7 @@ def _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna, lna, v
     src = soapy.source(dev, "fc32", 1, dev_args, '', [''], [''])
     src.set_sample_rate(0, samp_rate)
     src.set_frequency(0, center_freq)
+    src.set_bandwidth(0, min(28e6, samp_rate))
     src.set_gain_mode(0, False)
 
     if driver == 'hackrf':

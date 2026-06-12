@@ -23,26 +23,28 @@ except Exception:
     HAVE_SDL = False
 
 from fpv_sdr import build_source, quad_demod_gain, UHD_ALIASES
-from fpv_display import frame_sink, decoder_sink
+from fpv_display import frame_sink
 
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
-                 rotate=0):
+                 rotate=0, oversample=2, contrast=1.0):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
 
+        oversample = max(1, int(oversample))
+        self.cap_rate = cap_rate = samp_rate * oversample
         self.src, self._retune = build_source(
-            samp_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna)
+            cap_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna)
 
         title = 'Dragon FPV %.0f MHz' % (freq / 1e6)
         self.low_pass_filter_1 = filter.fir_filter_fff(
-            1,
-            firdes.low_pass(1, samp_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
+            oversample,
+            firdes.low_pass(1, cap_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
         self.analog_quadrature_demod_cf_0 = analog.quadrature_demod_cf(
-            quad_demod_gain(samp_rate))
+            quad_demod_gain(cap_rate) * contrast)
         self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate)
 
         if sdr.lower() in UHD_ALIASES or not dcblock:
@@ -54,36 +56,36 @@ class viewer(gr.top_block):
         self.connect((self.analog_quadrature_demod_cf_0, 0), (self.low_pass_filter_1, 0))
         self.connect((self.low_pass_filter_1, 0), (self.NTSC_decoder_c_0, 0))
 
+        self.NTSC_video_stream_converter_c_0 = NTSC.video_stream_converter_c(
+            samp_rate, samp_rate / (360 * 240 * 60))
+        self.connect((self.NTSC_decoder_c_0, 0), (self.NTSC_video_stream_converter_c_0, 0))
+        self.connect((self.NTSC_decoder_c_0, 1), (self.NTSC_video_stream_converter_c_0, 1))
+        self.connect((self.NTSC_decoder_c_0, 2), (self.NTSC_video_stream_converter_c_0, 2))
+        self.connect((self.NTSC_decoder_c_0, 3), (self.NTSC_video_stream_converter_c_0, 3))
+
         self.recorder = None
+        self.frame_sink_0 = None
         if HAVE_SDL:
-            self.NTSC_video_stream_converter_c_0 = NTSC.video_stream_converter_c(
-                samp_rate, samp_rate / (360 * 240 * 60))
             self.video_sdl_sink_0 = video_sdl.sink_s(0, 360, 240, (360 * 2), (240 * 2))
-            self.connect((self.NTSC_decoder_c_0, 0), (self.NTSC_video_stream_converter_c_0, 0))
-            self.connect((self.NTSC_decoder_c_0, 1), (self.NTSC_video_stream_converter_c_0, 1))
-            self.connect((self.NTSC_decoder_c_0, 2), (self.NTSC_video_stream_converter_c_0, 2))
-            self.connect((self.NTSC_decoder_c_0, 3), (self.NTSC_video_stream_converter_c_0, 3))
             self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.video_sdl_sink_0, 0))
             if record_path:
-                self.recorder = frame_sink(360, 240, None, record_path=record_path)
+                self.recorder = frame_sink(360, 240, None, record_path=record_path, rotate=rotate)
                 self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.recorder, 0))
         else:
-            self.decoder_sink_0 = decoder_sink(
+            self.frame_sink_0 = frame_sink(
                 360, 240, frame_out, record_path=record_path, live=live, title=title,
                 rotate=rotate)
-            self.null_state = blocks.null_sink(gr.sizeof_float)
-            self.connect((self.NTSC_decoder_c_0, 0), self.null_state)
-            self.connect((self.NTSC_decoder_c_0, 1), (self.decoder_sink_0, 0))
-            self.connect((self.NTSC_decoder_c_0, 2), (self.decoder_sink_0, 1))
-            self.connect((self.NTSC_decoder_c_0, 3), (self.decoder_sink_0, 2))
+            self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.frame_sink_0, 0))
 
     def retune(self, freq):
         self.frequency_carrier = freq
         self._retune(freq)
 
+    def set_contrast(self, contrast):
+        self.analog_quadrature_demod_cf_0.set_gain(quad_demod_gain(self.cap_rate) * contrast)
+
     def window_closed(self):
-        sink = getattr(self, 'decoder_sink_0', None)
-        return sink is not None and sink.closed
+        return self.frame_sink_0 is not None and self.frame_sink_0.closed
 
 
 def main():
@@ -104,12 +106,17 @@ def main():
                     help='disable the zero-IF DC blocker on the decode path')
     ap.add_argument('--rotate', type=int, default=0, choices=[0, 90, 180, 270],
                     help='rotate the displayed video by this many degrees')
+    ap.add_argument('--oversample', type=int, default=1,
+                    help='capture at oversample*samp-rate then decimate (wide demod, correct decoder timing)')
+    ap.add_argument('--contrast', type=float, default=1.0,
+                    help='multiply the quad-demod gain to match the decoder sync/black/white levels')
     args = ap.parse_args()
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
                 args.dev_args, args.antenna, frame_out=args.frame_out,
                 record_path=args.record, live=(not args.no_window),
-                dcblock=(not args.no_dcblock), rotate=args.rotate)
+                dcblock=(not args.no_dcblock), rotate=args.rotate,
+                oversample=args.oversample, contrast=args.contrast)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()
