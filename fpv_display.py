@@ -4,6 +4,8 @@
 
 import os
 import sys
+import time
+import threading
 import subprocess
 import numpy as np
 from gnuradio import gr
@@ -108,54 +110,85 @@ class decoder_sink(gr.sync_block):
         self._frame = np.full((self.h, self.w), 16, dtype=np.uint8)
         self._valid = 0
         self.frame_count = 0
-        self._pipes = []
+        self.closed = False
+
+        self._live = None
+        self._rec = None
+        self._latest = None
+        self._lock = threading.Lock()
+        self._run = True
+        self._writer = None
 
         size = '%dx%d' % (self.w, self.h)
         if live:
-            self._pipes.append(subprocess.Popen(
+            self._live = subprocess.Popen(
                 ['ffplay', '-hide_banner', '-loglevel', 'error', '-autoexit',
+                 '-fflags', 'nobuffer', '-flags', 'low_delay',
                  '-f', 'rawvideo', '-pixel_format', 'gray', '-video_size', size,
                  '-framerate', '30', '-window_title', title,
                  '-x', str(self.w * 2), '-y', str(self.h * 2), '-i', '-'],
-                stdin=subprocess.PIPE))
+                stdin=subprocess.PIPE)
             sys.stderr.write("[fpv] live window (ffplay)\n")
+            self._writer = threading.Thread(target=self._live_writer, daemon=True)
+            self._writer.start()
         if record_path:
-            self._pipes.append(subprocess.Popen(
+            self._rec = subprocess.Popen(
                 ['ffmpeg', '-y', '-loglevel', 'error',
                  '-f', 'rawvideo', '-pix_fmt', 'gray', '-s', size,
                  '-r', str(record_fps), '-i', '-', '-pix_fmt', 'yuv420p', record_path],
-                stdin=subprocess.PIPE))
+                stdin=subprocess.PIPE)
             sys.stderr.write("[fpv] recording to %s\n" % record_path)
 
+    def _live_writer(self):
+        while self._run:
+            with self._lock:
+                data = self._latest
+                self._latest = None
+            if data is None:
+                time.sleep(0.005)
+                continue
+            try:
+                self._live.stdin.write(data)
+                self._live.stdin.flush()
+            except (BrokenPipeError, ValueError, OSError):
+                self.closed = True
+                return
+
     def stop(self):
-        pipes = self._pipes
-        self._pipes = []
-        for p in pipes:
+        self._run = False
+        if self._writer is not None:
+            self._writer.join(timeout=1)
+        for p in (self._live, self._rec):
+            if p is None:
+                continue
             if p.stdin is not None:
-                p.stdin.close()
+                try:
+                    p.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
             try:
                 p.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 p.kill()
+        self._live = None
+        self._rec = None
         return True
 
     def _emit(self):
-        img = self._frame
-        if self._pipes:
-            data = img.tobytes()
-            alive = []
-            for p in self._pipes:
-                try:
-                    p.stdin.write(data)
-                except (BrokenPipeError, ValueError):
-                    continue
-                alive.append(p)
-            self._pipes = alive
+        data = self._frame.tobytes()
+        if self._live is not None:
+            with self._lock:
+                self._latest = data
+        if self._rec is not None:
+            try:
+                self._rec.stdin.write(data)
+            except (BrokenPipeError, ValueError):
+                self._rec = None
         self.frame_count += 1
         if self.out_path and self.frame_count % self.every == 0:
             tmp = self.out_path + '.tmp'
             try:
-                Image.fromarray(img, mode='L').save(tmp, format='PNG')
+                Image.fromarray(self._frame, mode='L').save(tmp, format='PNG')
                 os.replace(tmp, self.out_path)
             except OSError:
                 pass

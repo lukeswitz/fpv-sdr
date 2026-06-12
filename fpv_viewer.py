@@ -79,6 +79,10 @@ class viewer(gr.top_block):
         self.frequency_carrier = freq
         self._retune(freq)
 
+    def window_closed(self):
+        sink = getattr(self, 'decoder_sink_0', None)
+        return sink is not None and sink.closed
+
 
 def main():
     ap = argparse.ArgumentParser(description="Gated FPV video viewer (one channel)")
@@ -110,8 +114,8 @@ def main():
 
     tb.start()
     try:
-        while True:
-            time.sleep(1)
+        while not tb.window_closed():
+            time.sleep(0.2)
     except (EOFError, KeyboardInterrupt):
         pass
 

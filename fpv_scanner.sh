@@ -185,7 +185,7 @@ sweep_channels() {
         "${tokens[@]}" 2>"$errf" \
       | awk '/^DETECT/{printf "  %-5s %4.0f MHz  %7.1f dBFS\n", $2, $3/1e6, $4}' \
       | sort -k4 -nr
-    grep "noise floor" "$errf" 2>/dev/null | sed 's/^/[INFO] /'
+    grep -o "noise floor.*" "$errf" 2>/dev/null | tail -1 | sed 's/^/[INFO] /'
     DETECT_PID=""
 }
 
