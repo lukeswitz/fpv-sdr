@@ -108,7 +108,8 @@ class decoder_sink(gr.sync_block):
         self.out_path = out_path
         self.every = max(1, int(every))
         self._frame = np.full((self.h, self.w), 16, dtype=np.uint8)
-        self._valid = 0
+        self._since = 0
+        self._last_y = 0
         self.frame_count = 0
         self.closed = False
 
@@ -198,12 +199,25 @@ class decoder_sink(gr.sync_block):
         yi = input_items[1].astype(np.int32)
         lm = input_items[2]
         valid = (xi >= 0) & (xi < self.w) & (yi >= 0) & (yi < self.h) & (lm >= 0)
-        v = int(np.count_nonzero(valid))
-        if v:
-            idx = yi[valid] * self.w + xi[valid]
-            self._frame.reshape(-1)[idx] = np.clip(lm[valid], 0, 255).astype(np.uint8)
-            self._valid += v
-            while self._valid >= self.n:
-                self._valid -= self.n
+        if valid.any():
+            xv = xi[valid]
+            yv = yi[valid]
+            lv = np.clip(lm[valid], 0, 255).astype(np.uint8)
+            flat = self._frame.reshape(-1)
+            wraps = list(np.nonzero((yv[1:] <= 2) & (yv[:-1] >= self.h - 40))[0] + 1)
+            if self._last_y >= self.h - 40 and yv[0] <= 2:
+                wraps.insert(0, 0)
+            prev = 0
+            for w in wraps:
+                if w > prev:
+                    flat[yv[prev:w] * self.w + xv[prev:w]] = lv[prev:w]
                 self._emit()
+                self._since = 0
+                prev = w
+            flat[yv[prev:] * self.w + xv[prev:]] = lv[prev:]
+            self._since += len(xv) - prev
+            if self._since >= 2 * self.n:
+                self._emit()
+                self._since = 0
+            self._last_y = int(yv[-1])
         return len(input_items[0])
