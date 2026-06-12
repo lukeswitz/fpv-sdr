@@ -88,10 +88,13 @@ def main():
     ap.add_argument('--antenna', default=None)
     ap.add_argument('--power-thresh', type=float, default=-50.0)
     ap.add_argument('--lock-thresh', type=float, default=0.5)
+    ap.add_argument('--margin', type=float, default=6.0,
+                    help='dB above the median noise floor to call a channel a hit')
     ap.add_argument('--settle', type=float, default=0.35)
     ap.add_argument('--lock-dwell', type=float, default=0.7)
     ap.add_argument('--continuous', action='store_true')
     ap.add_argument('--stop-on-hit', action='store_true')
+    ap.add_argument('--debug', action='store_true')
     ap.add_argument('channels', nargs='+')
     args = ap.parse_args()
 
@@ -126,31 +129,29 @@ def main():
 
     rc = 1
     try:
-        first_pass = True
-        while first_pass or args.continuous:
-            first_pass = False
+        while True:
+            results = []
             for name, freq in chans:
                 tb.retune(freq)
                 time.sleep(args.settle)
                 pwr = tb.power_dbfs()
-                lock = 0
-                if pwr >= args.power_thresh and tb.have_lock:
-                    time.sleep(args.lock_dwell)
-                    pwr = tb.power_dbfs()
-                    lock = 1 if tb.lock_metric() >= args.lock_thresh else 0
-                if lock:
-                    status = 'LOCK'
-                elif pwr >= args.power_thresh:
-                    status = 'carrier'
-                else:
-                    status = 'no'
-                print("DETECT %s %.0f %.1f %d %s" % (name, freq, pwr, lock, status),
-                      flush=True)
-                if lock:
-                    print("HIT %s %.0f" % (name, freq), flush=True)
-                    rc = 0
-                    if args.stop_on_hit:
-                        return rc
+                results.append((name, freq, pwr))
+                if args.debug and tb.have_lock:
+                    sys.stderr.write("DBG %s pwr=%.1f lockmetric=%.3f\n"
+                                     % (name, pwr, tb.lock_metric()))
+                print("DETECT %s %.0f %.1f 0 scan" % (name, freq, pwr), flush=True)
+
+            powers = sorted(p for _, _, p in results)
+            floor = powers[len(powers) // 2]
+            hits = sorted((r for r in results if r[2] >= floor + args.margin),
+                          key=lambda r: -r[2])
+            sys.stderr.write("[detect] noise floor %.1f dBFS; %d channel(s) >= floor+%.0f dB\n"
+                             % (floor, len(hits), args.margin))
+            for name, freq, pwr in hits:
+                print("HIT %s %.0f %.1f" % (name, freq, pwr - floor), flush=True)
+                rc = 0
+            if (hits and args.stop_on_hit) or not args.continuous:
+                break
     except KeyboardInterrupt:
         pass
     finally:

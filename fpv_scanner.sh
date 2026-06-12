@@ -9,23 +9,23 @@ PYTHON="${FPV_PYTHON:-python3}"
 SDR="${FPV_SDR:-uhd}"
 GAIN="${FPV_GAIN:-40}"
 SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
-POWER_THRESH="${FPV_POWER_THRESH:--50}"
-LOCK_THRESH="${FPV_LOCK_THRESH:-0.5}"
-SETTLE="${FPV_SETTLE:-0.35}"
-LOCK_DWELL="${FPV_LOCK_DWELL:-0.7}"
+DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-20e6}"
+MARGIN="${FPV_MARGIN:-6}"
+SETTLE="${FPV_SETTLE:-0.2}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
+VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --sdr) SDR="$2"; shift 2 ;;
         --gain) GAIN="$2"; shift 2 ;;
         --samp-rate) SAMP_RATE="$2"; shift 2 ;;
-        --power-thresh) POWER_THRESH="$2"; shift 2 ;;
+        --margin) MARGIN="$2"; shift 2 ;;
         --dev-args) DEV_ARGS="$2"; shift 2 ;;
         --antenna) ANTENNA="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--samp-rate HZ] [--power-thresh dBFS] [--dev-args STR] [--antenna NAME]"
+            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME]"
             exit 0 ;;
         *) echo "[WARN] unknown arg: $1"; shift ;;
     esac
@@ -101,6 +101,7 @@ set_frequency() {
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
+        ${VIEW_EXTRA} \
         >/dev/null 2>&1 &
     TB_INSTANCE=$!
 
@@ -120,7 +121,7 @@ scan_channels() {
         tokens+=("${channel}:${CHANNELS[$channel]}e6")
     done
 
-    echo "[INFO] Scanning ${#tokens[@]} channels headless on [$SDR] — no window opens until a signal locks"
+    echo "[INFO] Scanning ${#tokens[@]} channels headless on [$SDR] — no window opens until a signal is found"
     echo "[INFO] (type 'stop' to abort the sweep)"
 
     local hit_name="" hit_freq=""
@@ -138,10 +139,9 @@ scan_channels() {
                 ;;
         esac
     done < <(
-        DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$DETECT_PY" \
-            --sdr "$SDR" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
-            --power-thresh "$POWER_THRESH" --lock-thresh "$LOCK_THRESH" \
-            --settle "$SETTLE" --lock-dwell "$LOCK_DWELL" --continuous \
+        "$PYTHON" "$DETECT_PY" \
+            --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
+            --settle "$SETTLE" --margin "$MARGIN" \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
             "${tokens[@]}" 2>/dev/null
@@ -158,7 +158,7 @@ scan_channels() {
     if [[ -n "$hit_name" ]]; then
         local mhz
         mhz=$(awk "BEGIN{printf \"%.0f\", $hit_freq/1e6}")
-        echo -e "\n[SIGNAL] $hit_name locked at ${mhz} MHz — opening viewer"
+        echo -e "\n[SIGNAL] $hit_name found at ${mhz} MHz — opening viewer"
         echo "$(date +%Y-%m-%d_%H:%M:%S),HIT,$hit_name,$mhz" >> "$SCAN_LOG"
         set_frequency "$mhz" "$hit_name"
     else
@@ -180,14 +180,15 @@ show_menu() {
     echo "SDR: $SDR  |  Gain: $GAIN  |  Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
     echo ""
     echo "Commands:"
-    echo "  scan          - Headless sweep; window opens only on a locked signal"
+    echo "  scan          - Sweep all channels; opens viewer on the strongest signal"
     echo "  stop          - Stop the sweep"
     echo "  set <CH>      - Tune+view a channel (e.g., 'set R6')"
     echo "  freq <MHz>    - Tune+view an exact frequency (e.g., 'freq 5843')"
     echo "  list          - Show all channels"
     echo "  sdr <NAME>    - Switch radio (uhd|hackrf|bladerf|...)"
     echo "  gain <dB>     - Set RX gain"
-    echo "  dwell <SEC>   - Per-candidate lock dwell (default: ${LOCK_DWELL}s)"
+    echo "  dwell <SEC>   - Time per channel during scan (default: ${SETTLE}s)"
+    echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
     echo "  log           - Show scan log"
     echo "  quit          - Exit"
     echo "========================================="
@@ -267,10 +268,18 @@ main() {
                 ;;
             dwell)
                 if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-                    LOCK_DWELL="$arg1"
-                    echo "[INFO] Per-candidate lock dwell set to ${LOCK_DWELL}s"
+                    SETTLE="$arg1"
+                    echo "[INFO] Per-channel scan time set to ${SETTLE}s"
                 else
-                    echo "[ERROR] Invalid dwell time: $arg1"
+                    echo "[ERROR] Invalid time: $arg1"
+                fi
+                ;;
+            margin)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    MARGIN="$arg1"
+                    echo "[INFO] Detection margin set to ${MARGIN} dB over noise floor"
+                else
+                    echo "[ERROR] Invalid margin: $arg1"
                 fi
                 ;;
             log) [[ -f "$SCAN_LOG" ]] && tail -20 "$SCAN_LOG" || echo "[INFO] No log entries" ;;
