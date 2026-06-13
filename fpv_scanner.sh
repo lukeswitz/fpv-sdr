@@ -73,6 +73,7 @@ SCAN_ORDER=(
 TB_INSTANCE=""
 DETECT_PID=""
 SCAN_ACTIVE=0
+SCAN_LOOP_ABORT=0
 CURRENT_FREQ=""
 CURRENT_CHANNEL=""
 
@@ -190,6 +191,95 @@ scan_channels() {
     SCAN_ACTIVE=0
 }
 
+scan_loop() {
+    local timeout="${1:-}"
+    local gap="${FPV_SCAN_LOOP_GAP:-2}"
+    SCAN_ACTIVE=1
+    SCAN_LOOP_ABORT=0
+    release_sdr
+
+    local tokens=() channel
+    for channel in "${SCAN_ORDER[@]}"; do
+        tokens+=("${channel}:${CHANNELS[$channel]}e6")
+    done
+
+    local deadline=0 watchdog=""
+    if [[ "$timeout" =~ ^[0-9]+$ && "$timeout" -gt 0 ]]; then
+        deadline=$(( $(date +%s) + timeout ))
+        ( sleep "$timeout"; pkill -TERM -f "fpv_detect.py" >/dev/null 2>&1 ) &
+        watchdog=$!
+        echo "[INFO] Continuous scan on [$SDR] — auto-stops after ${timeout}s. Ctrl-C anytime, or ENTER between sweeps."
+    else
+        echo "[INFO] Continuous scan on [$SDR] — re-sweeping until a valid signal. Ctrl-C anytime, or ENTER between sweeps."
+    fi
+
+    trap 'SCAN_LOOP_ABORT=1; SCAN_ACTIVE=0; pkill -TERM -f "fpv_detect.py" >/dev/null 2>&1' INT
+
+    local pass=0 hit_name="" hit_freq=""
+    while [[ $SCAN_ACTIVE -eq 1 && $SCAN_LOOP_ABORT -eq 0 ]]; do
+        if [[ $deadline -gt 0 && $(date +%s) -ge $deadline ]]; then
+            echo "[INFO] Continuous scan time limit reached"
+            break
+        fi
+        pass=$((pass + 1))
+        echo -e "\n[INFO] Sweep pass #$pass (${#tokens[@]} channels)…"
+        hit_name=""; hit_freq=""
+        while read -r tag f1 f2 f3 _ f5; do
+            [[ $SCAN_ACTIVE -eq 0 || $SCAN_LOOP_ABORT -eq 1 ]] && break
+            case "$tag" in
+                DETECT)
+                    local mhz
+                    mhz=$(awk "BEGIN{printf \"%.0f\", $f2/1e6}")
+                    printf "  %-5s %5s MHz  %7s dBFS  %s\n" "$f1" "$mhz" "$f3" "$f5"
+                    ;;
+                HIT)
+                    hit_name="$f1"; hit_freq="$f2"
+                    break
+                    ;;
+            esac
+        done < <(
+            "$PYTHON" "$DETECT_PY" \
+                --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
+                ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
+                --settle "$SETTLE" --margin "$MARGIN" \
+                ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
+                ${ANTENNA:+--antenna "$ANTENNA"} \
+                "${tokens[@]}" 2>/dev/null
+        )
+        pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+        DETECT_PID=""
+
+        [[ -n "$hit_name" ]] && break
+        [[ $SCAN_ACTIVE -eq 0 || $SCAN_LOOP_ABORT -eq 1 ]] && break
+        if [[ $deadline -gt 0 && $(date +%s) -ge $deadline ]]; then
+            echo "[INFO] Continuous scan time limit reached"
+            break
+        fi
+        echo "[INFO] No signal — next sweep in ${gap}s (press ENTER to stop now)"
+        if read -t "$gap" -r _; then
+            SCAN_LOOP_ABORT=1
+            break
+        fi
+    done
+
+    trap cleanup EXIT INT TERM
+    [[ -n "$watchdog" ]] && kill "$watchdog" >/dev/null 2>&1
+
+    if [[ -n "$hit_name" ]]; then
+        local mhz
+        mhz=$(awk "BEGIN{printf \"%.0f\", $hit_freq/1e6}")
+        echo -e "\n[SIGNAL] $hit_name found at ${mhz} MHz — opening viewer"
+        echo "$(date +%Y-%m-%d_%H:%M:%S),HIT,$hit_name,$mhz" >> "$SCAN_LOG"
+        set_frequency "$mhz" "$hit_name"
+    elif [[ $SCAN_LOOP_ABORT -eq 1 ]]; then
+        echo -e "\n[INFO] Continuous scan stopped"
+    else
+        echo -e "\n[INFO] Continuous scan ended — no valid signal"
+    fi
+    SCAN_ACTIVE=0
+    SCAN_LOOP_ABORT=0
+}
+
 sweep_channels() {
     release_sdr
     local tokens=() channel
@@ -212,7 +302,7 @@ sweep_channels() {
 }
 
 show_spectrum() {
-    local arg="$1"
+    local arg="$1" interval="$2"
     stop_scan
     release_sdr
     local tokens=() channel
@@ -232,6 +322,10 @@ show_spectrum() {
     elif [[ "$arg" =~ ^[0-9]+$ ]]; then
         extra="--spec-center ${arg}e6 --continuous"
         echo "[INFO] Live spectrum @ ${arg} MHz — Ctrl-C to stop"
+    fi
+    if [[ "$interval" =~ ^[0-9]+(\.[0-9]+)?$ && "$extra" == *--continuous* ]]; then
+        extra="$extra --spec-interval $interval"
+        echo "[INFO]   refresh every ${interval}s between frames"
     fi
     "$PYTHON" "$DETECT_PY" \
         --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
@@ -258,27 +352,29 @@ show_menu() {
     echo -e "\n========================================="
     echo "FPV Channel Scanner & Monitor"
     echo "========================================="
-    echo "SDR: $SDR  |  Gain: $GAIN dB${LNA:+  LNA:$LNA}${VGA:+ VGA:$VGA}${AMP:+ AMP:on}  |  Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
+    echo "SDR: $SDR  |  Gain: $GAIN dB${LNA:+  LNA:$LNA}${VGA:+ VGA:$VGA}${AMP:+ AMP:on}  |  Current: ${CURRENT_CHANNEL:-none}${CURRENT_FREQ:+ (${CURRENT_FREQ} MHz)}"
     echo ""
     echo "Commands:"
-    echo "  scan          - Sweep all channels; opens viewer on the strongest VALID signal (SNR + shape gated)"
-    echo "  sweep         - Fast RSSI survey of all channels (no video)"
-    echo "  spectrum [live|CH|MHz] - Draw the band FFT in the terminal (live=refresh, CH/MHz=zoom one span)"
-    echo "  stop          - Stop the sweep"
-    echo "  set <CH>      - Tune+view a channel (e.g., 'set R6')"
-    echo "  freq <MHz>    - Tune+view an exact frequency (e.g., 'freq 5843')"
-    echo "  list          - Show all channels"
-    echo "  sdr <NAME>    - Switch radio (uhd|hackrf|bladerf|...)"
-    echo "  gain <dB>     - Set RX gain (all SDRs; on HackRF drives LNA+VGA)"
-    echo "  lna <dB>      - HackRF LNA/IF gain 0-40 (optional; overrides gain)"
-    echo "  vga <dB>      - HackRF VGA/baseband gain 0-62 (optional; overrides gain)"
-    echo "  dwell <SEC>   - Time per channel during scan (default: ${SETTLE}s)"
-    echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
-    echo "  record <file> - Record decoded video (e.g. 'record /tmp/fpv.mp4'); 'record' off"
-    echo "  rotate <deg>  - Rotate video 0|90|180|270 (default: ${ROTATE})"
-    echo "  contrast <x>  - Demod contrast; lower if frame decodes only partway (default: ${CONTRAST})"
-    echo "  log           - Show scan log"
-    echo "  quit          - Exit"
+    printf "  %-16s %s\n" \
+        "scan"            "sweep once, view strongest valid signal" \
+        "scan loop [SEC]" "re-sweep until signal; Ctrl-C/ENTER stop; SEC auto-stops" \
+        "sweep"           "fast RSSI survey, no video" \
+        "spectrum [X] [SEC]" "terminal FFT; X=live|CH|MHz, SEC=refresh delay" \
+        "stop"            "stop the sweep" \
+        "set <CH>"        "tune + view a channel (e.g. set R6)" \
+        "freq <MHz>"      "tune + view a frequency (e.g. freq 5843)" \
+        "list"            "list all channels" \
+        "sdr <NAME>"      "switch radio (uhd|hackrf|bladerf)" \
+        "gain <dB>"       "RX gain (HackRF drives LNA+VGA)" \
+        "lna <dB>"        "HackRF LNA 0-40, optional override" \
+        "vga <dB>"        "HackRF VGA 0-62, optional override" \
+        "dwell <SEC>"     "per-channel scan time (def ${SETTLE})" \
+        "margin <dB>"     "detect threshold over floor (def ${MARGIN})" \
+        "record <file>"   "record video; bare 'record' = off" \
+        "rotate <deg>"    "0|90|180|270 (def ${ROTATE})" \
+        "contrast <x>"    "demod contrast (def ${CONTRAST})" \
+        "log"             "show scan log" \
+        "quit"            "exit"
     echo "========================================="
 }
 
@@ -318,9 +414,14 @@ main() {
         read -r cmd arg1 arg2
         
         case "$cmd" in
-            scan) scan_channels ;;
+            scan)
+                case "$arg1" in
+                    loop|continuous|keep) scan_loop "$arg2" ;;
+                    *) scan_channels ;;
+                esac
+                ;;
             sweep) sweep_channels ;;
-            spectrum|fft) show_spectrum "$arg1" ;;
+            spectrum|fft) show_spectrum "$arg1" "$arg2" ;;
             stop) stop_scan ;;
             set)
                 if [[ -n "${CHANNELS[$arg1]}" ]]; then

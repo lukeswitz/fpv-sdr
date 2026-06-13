@@ -394,6 +394,8 @@ def main():
                     help='disable ANSI colour in the spectrum')
     ap.add_argument('--spec-peak', action='store_true',
                     help='peak-hold the spectrum (catch bursts) instead of averaging each column')
+    ap.add_argument('--spec-interval', type=float, default=0.0,
+                    help='seconds to pause between live spectrum redraws (0 = redraw immediately)')
     ap.add_argument('--continuous', action='store_true')
     ap.add_argument('--stop-on-hit', action='store_true')
     ap.add_argument('--debug', action='store_true')
@@ -461,6 +463,8 @@ def main():
                 sys.stdout.flush()
                 if not args.continuous:
                     break
+                if args.spec_interval > 0:
+                    time.sleep(args.spec_interval)
         except KeyboardInterrupt:
             pass
         finally:
