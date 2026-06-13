@@ -29,7 +29,7 @@ from fpv_display import frame_sink
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
-                 rotate=0, oversample=2, contrast=1.0):
+                 rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -37,7 +37,8 @@ class viewer(gr.top_block):
         oversample = max(1, int(oversample))
         self.cap_rate = cap_rate = samp_rate * oversample
         self.src, self._retune = build_source(
-            cap_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna)
+            cap_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna,
+            lna=lna, vga=vga, amp=amp)
 
         title = 'Dragon FPV %.0f MHz' % (freq / 1e6)
         self.low_pass_filter_1 = filter.fir_filter_fff(
@@ -93,6 +94,12 @@ def main():
     ap.add_argument('--sdr', default='uhd')
     ap.add_argument('--samp-rate', type=float, default=20e6)
     ap.add_argument('--gain', type=float, default=40.0)
+    ap.add_argument('--lna', type=float, default=None,
+                    help='hackrf LNA (IF) gain dB 0-40 (default 24)')
+    ap.add_argument('--vga', type=float, default=None,
+                    help='hackrf VGA (baseband) gain dB 0-62 (default 20)')
+    ap.add_argument('--amp', action='store_true',
+                    help='hackrf +14 dB front-end amp (OFF by default)')
     ap.add_argument('--dev-args', default='')
     ap.add_argument('--antenna', default=None)
     ap.add_argument('--freq', type=float, required=True)
@@ -116,7 +123,8 @@ def main():
                 args.dev_args, args.antenna, frame_out=args.frame_out,
                 record_path=args.record, live=(not args.no_window),
                 dcblock=(not args.no_dcblock), rotate=args.rotate,
-                oversample=args.oversample, contrast=args.contrast)
+                oversample=args.oversample, contrast=args.contrast,
+                lna=args.lna, vga=args.vga, amp=args.amp)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()

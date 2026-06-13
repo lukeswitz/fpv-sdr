@@ -42,10 +42,15 @@ SoapySDRUtil --find         # confirm SoapySDR sees driver=hackrf
 ./fpv_scanner.sh --sdr hackrf
 ```
 
-HackRF RX gains follow the official stages (`AMP` RF amp 0/+11 dB, `LNA` 0–40,
-`VGA` 0–62). **The RF amp (`AMP`) is left OFF** — HackRF's max input is −5 dBm and
-enabling the amp on a strong signal can destroy the front-end LNA. Use an external
-attenuator for very strong transmitters rather than risking the front-end.
+HackRF RX gains use the three official stages (`AMP` RF amp 0/+14 dB, `LNA` 0–40,
+`VGA` 0–62). `--gain`/`gain` drives the front-end (it maps to LNA + VGA); FPV
+transmitters are usually strong and nearby, so the HackRF default is a modest
+**24 dB, AMP OFF**, instead of the old 40 that pinned the noise floor up near
+−10…−20 dBFS (saturated front-end, collapsed SNR). Lower it further with `gain 16`
+if the floor is still hot, or split the stages explicitly with `--lna`/`--vga`.
+**The RF amp (`AMP`) stays OFF** — HackRF's max input is −5 dBm and enabling the amp
+on a strong signal can destroy the front-end LNA; use an external attenuator for
+very strong transmitters instead.
 
 Homebrew GNU Radio ships neither the `gnuradio.NTSC` out-of-tree module nor
 `video_sdl`. Build the decoder once, into your user prefix:
@@ -75,12 +80,13 @@ gr-ntsc-rc on the **WarDragon/ANTSDR** too, so its `video_sdl` path is crash-pro
 ffplay window (`fpv_display.decoder_sink`) instead of the SDL sink:
 
 ```bash
-"$PYTHON" fpv_viewer.py --sdr hackrf --gain 40 --samp-rate 10e6 --freq 5725e6
+"$PYTHON" fpv_viewer.py --sdr hackrf --gain 24 --samp-rate 10e6 --freq 5725e6
 ```
 
-Note: HackRF captures ~10 MHz of the ~18 MHz analog FPV signal (the decoder runs
-at 10 Msps), so tune to the transmitter's true center for the best image. The
-WarDragon/ANTSDR captures the full signal and decodes cleaner.
+Note: detection sweeps at 20 Msps (full FFT bandwidth) to localize the carrier, but
+the decoder runs at 10 Msps and captures ~10 MHz of the ~18 MHz analog FPV signal —
+so tune to the transmitter's true center for the best image. The WarDragon/ANTSDR
+captures the full signal and decodes cleaner.
 
 ## Usage
 ```bash
@@ -89,22 +95,37 @@ WarDragon/ANTSDR captures the full signal and decodes cleaner.
 ./fpv_scanner.sh --sdr bladerf --gain 30
 ```
 
-Flags: `--sdr <name>` `--gain <dB>` `--samp-rate <Hz>` `--power-thresh <dBFS>` `--dev-args <str>` `--antenna <name>` (all also settable via `FPV_*` env vars).
+Flags: `--sdr <name>` `--gain <dB>` (HackRF default 24, UHD 40) `--lna <dB>` `--vga <dB>` `--amp` (optional HackRF overrides) `--samp-rate <Hz>` `--margin <dB>` `--dev-args <str>` `--antenna <name>` (all also settable via `FPV_*` env vars).
 
 ### How scanning works
 
-`scan` runs a **headless** sweep of all channels — **no video window opens** while it searches. Each channel is gated in two stages: RF power must cross a threshold, then the NTSC decoder must achieve sync-lock (this rejects 5.8 GHz Wi-Fi and other non-video carriers). The video window opens **only** when a channel locks. One process owns the radio at a time, so the detector hands the radio off to the viewer on a hit.
+`scan` runs a **headless** sweep — **no video window opens** while it searches. Instead of visiting all ~56 channels one at a time, the detector takes a handful of **wideband FFT snapshots** (≈24 chunks of 16 MHz cover the whole 5.8 band at once) and reads every channel that falls inside each chunk from a single capture — much faster, and the spectrum shape drives the gate.
+
+A channel counts as a **valid signal** (not merely the loudest) only when it clears three gates:
+
+1. **SNR** — in-band power ≥ `--margin` dB over the measured noise floor (default 12).
+2. **Narrow-peak** — the carrier is a localized hump above its shoulders, which rejects broadband Wi-Fi that can out-power a real FPV carrier.
+3. **Carrier confirm** — on HackRF, a **constant-envelope (FM) test**: analog FPV is frequency-modulated, so its in-band amplitude is near-constant (low coefficient-of-variation), while Wi-Fi/OFDM and noise are not. On UHD / other SDRs, the NTSC decoder **sync-lock** is used instead.
+
+The true carrier center is then found by an FFT energy-centroid and mapped to the nearest channel (a VTX radiating a few MHz off-nominal is still identified, with the offset reported). The window opens **only** on a confirmed channel; with no valid carrier it prints `No FPV signals`. One process owns the radio at a time — the detector releases it before the viewer opens.
+
+`sweep` runs the same FFT survey but just prints the per-channel RSSI/SNR table and exits (no gating, no video).
 
 ### Commands
 
-- `scan` - Headless sweep; window opens only on a locked signal
+- `scan` - Headless FFT sweep; window opens only on a confirmed valid signal
+- `sweep` - Fast FFT RSSI/SNR survey of all channels (no video)
+- `spectrum [live｜CH｜MHz]` - Draw the FFT as a colored spectrum in the terminal. No arg = whole-band snapshot; `live` = refreshing band waterfall; a channel or frequency (`spectrum A8`, `spectrum 5725`) = a fast single-span live view of that 20 MHz window. Ctrl-C returns to the prompt.
 - `stop` - Stop the sweep
 - `set <CH>` - Tune and view a specific channel (e.g., `set R6`, `set A8`)
 - `freq <MHz>` - Tune and view an exact frequency (e.g., `freq 5843`)
 - `list` - Show all available channels
 - `sdr <NAME>` - Switch radio at runtime (`uhd`, `hackrf`, `bladerf`, …)
-- `gain <dB>` - Set RX gain
-- `dwell <SEC>` - Per-candidate lock dwell time (default: 0.7s)
+- `gain <dB>` - Set RX gain (all SDRs; on HackRF it drives LNA+VGA, default 24)
+- `lna <dB>` / `vga <dB>` - Optional HackRF LNA (0–40) / VGA (0–62) override
+- `margin <dB>` - SNR over the noise floor required to call a channel a signal (default 12)
+- `dwell <SEC>` - Per-chunk settle time during the sweep
+- `rotate <deg>` / `contrast <x>` / `record <file>` - Video display and capture options
 - `log` - View scan history
 - `quit` - Exit
 
@@ -139,24 +160,27 @@ Decoding runs entirely on the **host CPU** in GNU Radio — the SDR only tunes, 
 ## Architecture
 
 - `fpv_scanner.sh` — interactive orchestrator (channel tables, scan/view handoff, single-radio-owner management)
-- `fpv_detect.py` — headless two-stage signal detector (RF power + NTSC sync-lock); opens no window
-- `fpv_viewer.py` — gated video viewer; opens one SDL window for one locked channel
+- `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak shape gate, plus FM constant-envelope confirm on HackRF / NTSC sync-lock on UHD); opens no window
+- `fpv_viewer.py` — gated video viewer; opens one window for one confirmed channel
 - `fpv_sdr.py` — shared UHD/SoapySDR source factory
 - `top_block.py` — original standalone UHD flowgraph (kept for reference; not used by the scanner)
 
 ## Features
 
-- Real-time NTSC video decoding with SDL display
+- Real-time NTSC video decoding with live display
 - **Signal-gated scanning** — headless detection, no blank windows; the video window opens only on a confirmed signal
-- **Two-stage presence gate** — RF power + NTSC sync-lock, rejecting Wi-Fi / non-video carriers
+- **Wideband FFT sweep** — a few 16 MHz snapshots survey the whole band instead of stepping channel-by-channel
+- **Validity gate** — SNR over the noise floor + narrow-peak shape (rejects Wi-Fi), plus a constant-envelope FM test on HackRF / NTSC sync-lock on UHD
+- **Carrier-centroid channel ID** — measures the true center and reports any off-nominal VTX offset
 - **Multi-SDR** — UHD (ANTSDR/USRP) and SoapySDR (HackRF/BladeRF) via `--sdr`
+- Modest HackRF gain default (24 dB, AMP off) to keep the front-end out of compression — still fully settable with `gain`/`--lna`/`--vga`
 - In-place retune during the sweep (no per-channel process restart)
 - Manual frequency tuning
 - Scan logging and history
 
 ## Troubleshooting
 
-**No video window during a scan:** This is expected — the sweep is headless and a window opens only when a channel locks. Watch the per-channel `dBFS` / `LOCK` readout. If a window never opens even with a transmitter on, lower `--power-thresh` (e.g. `-60`) or raise `--gain`.
+**No video window during a scan:** Expected — the sweep is headless and a window opens only on a confirmed signal. Watch the per-channel `dBFS` / SNR readout and the `candidate … env-CV/lock … ACCEPT/REJECT` lines. If a transmitter you know is live is rejected, lower the SNR gate (`margin 10`) or, on HackRF, loosen the FM test (`--env-cv 0.4`). If the noise floor itself sits near −10…−20 dBFS, the gain is too high — lower it (`gain 16`).
 
 **No video window at all (display issue):**
 ```bash

@@ -7,12 +7,16 @@ SCAN_LOG="$PROJECT_DIR/scan_log.txt"
 PYTHON="${FPV_PYTHON:-python3}"
 
 SDR="${FPV_SDR:-uhd}"
-GAIN="${FPV_GAIN:-40}"
+GAIN="${FPV_GAIN:-}"
+GAIN_SET=""; [[ -n "$FPV_GAIN" ]] && GAIN_SET=1
+LNA="${FPV_LNA:-}"
+VGA="${FPV_VGA:-}"
+AMP="${FPV_AMP:-}"
 SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
 DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-20e6}"
 ROTATE="${FPV_ROTATE:-0}"
 CONTRAST="${FPV_CONTRAST:-0.8}"
-MARGIN="${FPV_MARGIN:-6}"
+MARGIN="${FPV_MARGIN:-12}"
 SETTLE="${FPV_SETTLE:-0.2}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
@@ -22,13 +26,16 @@ RECORD="${FPV_RECORD:-}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --sdr) SDR="$2"; shift 2 ;;
-        --gain) GAIN="$2"; shift 2 ;;
+        --gain) GAIN="$2"; GAIN_SET=1; shift 2 ;;
+        --lna) LNA="$2"; shift 2 ;;
+        --vga) VGA="$2"; shift 2 ;;
+        --amp) AMP=1; shift ;;
         --samp-rate) SAMP_RATE="$2"; shift 2 ;;
         --margin) MARGIN="$2"; shift 2 ;;
         --dev-args) DEV_ARGS="$2"; shift 2 ;;
         --antenna) ANTENNA="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME]"
+            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--lna N] [--vga N] [--amp] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME]"
             exit 0 ;;
         *) echo "[WARN] unknown arg: $1"; shift ;;
     esac
@@ -69,6 +76,15 @@ SCAN_ACTIVE=0
 CURRENT_FREQ=""
 CURRENT_CHANNEL=""
 
+resolve_gain() {
+    if [[ -z "$GAIN" ]]; then
+        case "$SDR" in
+            hackrf) GAIN=24 ;;
+            *) GAIN=40 ;;
+        esac
+    fi
+}
+
 release_sdr() {
     [[ -n "$DETECT_PID" ]] && kill -TERM "$DETECT_PID" 2>/dev/null
     [[ -n "$TB_INSTANCE" ]] && kill -TERM "$TB_INSTANCE" 2>/dev/null
@@ -102,6 +118,7 @@ set_frequency() {
     cd "$PROJECT_DIR" || return 1
     DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
+        ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
         --rotate "$ROTATE" --contrast "$CONTRAST" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
@@ -146,6 +163,7 @@ scan_channels() {
     done < <(
         "$PYTHON" "$DETECT_PY" \
             --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
+            ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
             --settle "$SETTLE" --margin "$MARGIN" \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
@@ -182,7 +200,8 @@ sweep_channels() {
     local errf="/tmp/fpv_sweep.err"
     "$PYTHON" "$DETECT_PY" \
         --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
-        --settle "$SETTLE" --margin "$MARGIN" --localize-dwell 0 \
+        ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
+        --settle "$SETTLE" --margin "$MARGIN" --survey-only \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         "${tokens[@]}" 2>"$errf" \
@@ -190,6 +209,43 @@ sweep_channels() {
       | sort -k4 -nr
     grep -o "noise floor.*" "$errf" 2>/dev/null | tail -1 | sed 's/^/[INFO] /'
     DETECT_PID=""
+}
+
+show_spectrum() {
+    local arg="$1"
+    stop_scan
+    release_sdr
+    local tokens=() channel
+    for channel in "${SCAN_ORDER[@]}"; do
+        tokens+=("${channel}:${CHANNELS[$channel]}e6")
+    done
+    local W
+    W=$(tput cols 2>/dev/null || echo 100)
+    if (( W > 28 )); then W=$((W - 8)); else W=80; fi
+    local extra=""
+    if [[ "$arg" == "live" ]]; then
+        extra="--continuous"
+        echo "[INFO] Live band spectrum — Ctrl-C to stop"
+    elif [[ -n "$arg" && -n "${CHANNELS[$arg]:-}" ]]; then
+        extra="--spec-center ${CHANNELS[$arg]}e6 --continuous"
+        echo "[INFO] Live spectrum @ $arg (${CHANNELS[$arg]} MHz) — Ctrl-C to stop"
+    elif [[ "$arg" =~ ^[0-9]+$ ]]; then
+        extra="--spec-center ${arg}e6 --continuous"
+        echo "[INFO] Live spectrum @ ${arg} MHz — Ctrl-C to stop"
+    fi
+    "$PYTHON" "$DETECT_PY" \
+        --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
+        ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
+        --settle 0.1 --chunk-dwell 0.06 --spectrum --spec-width "$W" $extra \
+        ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
+        ${ANTENNA:+--antenna "$ANTENNA"} \
+        "${tokens[@]}" 2>/dev/null &
+    local pid=$!
+    trap 'kill -TERM "$pid" 2>/dev/null' INT
+    wait "$pid" 2>/dev/null
+    trap cleanup EXIT INT TERM
+    DETECT_PID=""
+    echo
 }
 
 stop_scan() {
@@ -202,17 +258,20 @@ show_menu() {
     echo -e "\n========================================="
     echo "FPV Channel Scanner & Monitor"
     echo "========================================="
-    echo "SDR: $SDR  |  Gain: $GAIN  |  Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
+    echo "SDR: $SDR  |  Gain: $GAIN dB${LNA:+  LNA:$LNA}${VGA:+ VGA:$VGA}${AMP:+ AMP:on}  |  Current: $CURRENT_CHANNEL ($CURRENT_FREQ MHz)"
     echo ""
     echo "Commands:"
-    echo "  scan          - Sweep all channels; opens viewer on the strongest signal"
+    echo "  scan          - Sweep all channels; opens viewer on the strongest VALID signal (SNR + shape gated)"
     echo "  sweep         - Fast RSSI survey of all channels (no video)"
+    echo "  spectrum [live|CH|MHz] - Draw the band FFT in the terminal (live=refresh, CH/MHz=zoom one span)"
     echo "  stop          - Stop the sweep"
     echo "  set <CH>      - Tune+view a channel (e.g., 'set R6')"
     echo "  freq <MHz>    - Tune+view an exact frequency (e.g., 'freq 5843')"
     echo "  list          - Show all channels"
     echo "  sdr <NAME>    - Switch radio (uhd|hackrf|bladerf|...)"
-    echo "  gain <dB>     - Set RX gain"
+    echo "  gain <dB>     - Set RX gain (all SDRs; on HackRF drives LNA+VGA)"
+    echo "  lna <dB>      - HackRF LNA/IF gain 0-40 (optional; overrides gain)"
+    echo "  vga <dB>      - HackRF VGA/baseband gain 0-62 (optional; overrides gain)"
     echo "  dwell <SEC>   - Time per channel during scan (default: ${SETTLE}s)"
     echo "  margin <dB>   - Detection threshold over noise floor (default: ${MARGIN})"
     echo "  record <file> - Record decoded video (e.g. 'record /tmp/fpv.mp4'); 'record' off"
@@ -246,6 +305,7 @@ main() {
         resolve_fpv_python || { echo "[ERROR] No Python with GNU Radio bindings; set FPV_PYTHON"; exit 1; }
     fi
 
+    resolve_gain
     echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN, samp_rate: $SAMP_RATE)"
     echo "[INFO] Python: $PYTHON"
     echo "[INFO] Log file: $SCAN_LOG"
@@ -260,6 +320,7 @@ main() {
         case "$cmd" in
             scan) scan_channels ;;
             sweep) sweep_channels ;;
+            spectrum|fft) show_spectrum "$arg1" ;;
             stop) stop_scan ;;
             set)
                 if [[ -n "${CHANNELS[$arg1]}" ]]; then
@@ -283,17 +344,34 @@ main() {
                     stop_scan
                     release_sdr
                     SDR="$arg1"
-                    echo "[INFO] SDR set to $SDR"
+                    if [[ -z "$GAIN_SET" ]]; then GAIN=""; resolve_gain; fi
+                    echo "[INFO] SDR set to $SDR (gain $GAIN dB)"
                 else
                     echo "[INFO] Current SDR: $SDR"
                 fi
                 ;;
             gain)
                 if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-                    GAIN="$arg1"
+                    GAIN="$arg1"; GAIN_SET=1
                     echo "[INFO] Gain set to $GAIN dB (applies on next tune/scan)"
                 else
                     echo "[ERROR] Invalid gain: $arg1"
+                fi
+                ;;
+            lna)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    LNA="$arg1"
+                    echo "[INFO] HackRF LNA gain set to $LNA dB (applies on next tune/scan)"
+                else
+                    echo "[ERROR] Invalid LNA gain: $arg1"
+                fi
+                ;;
+            vga)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+                    VGA="$arg1"
+                    echo "[INFO] HackRF VGA gain set to $VGA dB (applies on next tune/scan)"
+                else
+                    echo "[ERROR] Invalid VGA gain: $arg1"
                 fi
                 ;;
             dwell)
