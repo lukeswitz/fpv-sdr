@@ -17,6 +17,38 @@ cd dragon-fpv-decoder
 Then type `scan` — no video window opens until a real FPV signal is confirmed.
 `./setup.sh --check` reports what's installed or missing and changes nothing.
 
+```
+
+=========================================
+FPV Channel Scanner & Monitor
+=========================================
+SDR: bladerf  |  Gain: 40 dB  |  Current: A8
+
+Commands:
+  scan             sweep once, view strongest valid signal
+  scan loop [SEC]  re-sweep until signal; Ctrl-C/ENTER stop; SEC auto-stops
+  sweep            fast RSSI survey, no video
+  spectrum [X] [SEC] terminal FFT; X=live|CH|MHz, SEC=refresh delay
+  stop             stop the sweep
+  set <CH>         tune + view a channel (e.g. set R6)
+  freq <MHz>       tune + view a frequency (e.g. freq 5843)
+  list             list all channels
+  sdr <NAME>       switch radio (uhd|hackrf|bladerf)
+  gain <dB>        RX gain (HackRF drives LNA+VGA)
+  lna <dB>         HackRF LNA 0-40, optional override
+  vga <dB>         HackRF VGA 0-62, optional override
+  dwell <SEC>      per-channel scan time (def 0.08)
+  margin <dB>      detect threshold over floor (def 12)
+  record <file>    record video; bare 'record' = off
+  rotate <deg>     0|90|180|270 (def 0)
+  contrast <x>     demod contrast (def 0.8)
+  log              show scan log
+  quit             exit
+```
+
+<img width="1050" height="324" alt="s" src="https://github.com/user-attachments/assets/f8eb754b-ada8-4e3a-843b-f0bcada306dd" />
+
+
 ## Install
 **`./setup.sh` does all of this automatically** — it detects macOS vs Linux, installs the
 stack, and builds gr-ntsc-rc. The manual steps below are for reference, non-apt Linux, or
