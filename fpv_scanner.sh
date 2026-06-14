@@ -93,7 +93,10 @@ resolve_gain() {
 
 resolve_speed() {
     if [[ -z "$DSR_SET" ]]; then
-        DETECT_SAMP_RATE=20e6
+        case "$SDR" in
+            hackrf) DETECT_SAMP_RATE=20e6 ;;
+            *)      DETECT_SAMP_RATE=40e6 ;;
+        esac
     fi
     if [[ -z "$SETTLE_SET" ]]; then
         case "$SDR" in
