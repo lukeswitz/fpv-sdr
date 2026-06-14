@@ -18,14 +18,17 @@ resolve_fpv_python() {
     fi
 
     local grdir grver cand np
-    for grdir in /opt/homebrew/lib/python3.*/site-packages/gnuradio /usr/local/lib/python3.*/site-packages/gnuradio; do
+    for grdir in /opt/homebrew/lib/python3.*/site-packages/gnuradio \
+                 /usr/local/lib/python3.*/site-packages/gnuradio \
+                 /usr/lib/python3.*/site-packages/gnuradio; do
         [[ -d "$grdir" ]] || continue
         grver=$(printf '%s\n' "$grdir" | sed -E 's#.*/(python3\.[0-9]+)/.*#\1#')
         for cand in \
             "/opt/homebrew/opt/${grver/python/python@}/bin/${grver}" \
             "/opt/homebrew/bin/${grver}" \
             "/usr/local/opt/${grver/python/python@}/bin/${grver}" \
-            "/usr/local/bin/${grver}"; do
+            "/usr/local/bin/${grver}" \
+            "/usr/bin/${grver}"; do
             [[ -x "$cand" ]] || continue
             if ! "$cand" -c "import numpy" >/dev/null 2>&1; then
                 for np in "/opt/homebrew/opt/numpy/lib/${grver}/site-packages" \
