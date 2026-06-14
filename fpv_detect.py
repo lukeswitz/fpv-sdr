@@ -105,15 +105,19 @@ class detector(gr.top_block):
         self.dcblock = filter.dc_blocker_cc(32, True)
         self.connect(self.src, self.dcblock)
 
+        self.cvlpf = filter.fir_filter_ccf(
+            1, firdes.low_pass(1, samp_rate, 9e6, 3e6, window.WIN_HAMMING, 6.76))
+        self.connect(self.dcblock, self.cvlpf)
+
         self.mag2 = blocks.complex_to_mag_squared(1)
         self.pwr_avg = blocks.moving_average_ff(pwr_win, 1.0 / pwr_win, 4000, 1)
         self.pwr_probe = blocks.probe_signal_f()
-        self.connect(self.dcblock, self.mag2, self.pwr_avg, self.pwr_probe)
+        self.connect(self.cvlpf, self.mag2, self.pwr_avg, self.pwr_probe)
 
         self.mag = blocks.complex_to_mag(1)
         self.mag_avg = blocks.moving_average_ff(pwr_win, 1.0 / pwr_win, 4000, 1)
         self.mag_probe = blocks.probe_signal_f()
-        self.connect(self.dcblock, self.mag, self.mag_avg, self.mag_probe)
+        self.connect(self.cvlpf, self.mag, self.mag_avg, self.mag_probe)
 
         self.center = start_freq
         self.loc_nfft = loc_nfft
