@@ -22,6 +22,7 @@ say()  { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
 ok()   { printf '  \033[32m[ok]\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m[--]\033[0m %s\n' "$*"; }
 err()  { printf '  \033[31m[XX]\033[0m %s\n' "$*"; }
+info() { printf '  \033[36m[i]\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 need() { "$@" || { err "command failed: $*"; exit 1; }; }
 run_quiet() {
@@ -84,8 +85,8 @@ install_mac() {
     else
         ok "all Homebrew deps already present — not reinstalling (leaves your Python untouched)"
     fi
-    warn "SoapyHackRF/SoapyBladeRF are built from source below — the Homebrew tap formulae"
-    warn "pull an extra python and fail on modern CMake, so they are deliberately avoided."
+    info "SoapyHackRF/SoapyBladeRF are built from source below — the Homebrew tap formulae"
+    info "pull an extra python and fail on modern CMake, so they are deliberately avoided."
 }
 
 build_soapy_module() {
