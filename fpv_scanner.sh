@@ -148,7 +148,8 @@ scan_channels() {
     echo "[INFO] Scanning ${#tokens[@]} channels headless on [$SDR] — no window opens until a signal is found"
     echo "[INFO] (type 'stop' to abort the sweep)"
 
-    local hit_name="" hit_freq=""
+    local hit_name="" hit_freq="" errf="/tmp/fpv_scan.err"
+    : > "$errf"
     while read -r tag f1 f2 f3 _ f5; do
         [[ $SCAN_ACTIVE -eq 0 ]] && break
         case "$tag" in
@@ -170,11 +171,13 @@ scan_channels() {
             ${CONFIRM:+--confirm "$CONFIRM"} \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
-            "${tokens[@]}" 2>/dev/null
+            "${tokens[@]}" 2>"$errf"
     )
 
     pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
     DETECT_PID=""
+
+    grep -E "candidate |selected " "$errf" 2>/dev/null | sed 's/^\[detect\] /  /'
 
     if [[ $SCAN_ACTIVE -eq 0 ]]; then
         echo "[INFO] Scan stopped"
