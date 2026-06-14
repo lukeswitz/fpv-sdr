@@ -17,36 +17,7 @@ cd dragon-fpv-decoder
 Then type `scan` — no video window opens until a real FPV signal is confirmed.
 `./setup.sh --check` reports what's installed or missing and changes nothing.
 
-```
 
-=========================================
-FPV Channel Scanner & Monitor
-=========================================
-SDR: bladerf  |  Gain: 40 dB  |  Current: A8
-
-Commands:
-  scan             sweep once, view strongest valid signal
-  scan loop [SEC]  re-sweep until signal; Ctrl-C/ENTER stop; SEC auto-stops
-  sweep            fast RSSI survey, no video
-  spectrum [X] [SEC] terminal FFT; X=live|CH|MHz, SEC=refresh delay
-  stop             stop the sweep
-  set <CH>         tune + view a channel (e.g. set R6)
-  freq <MHz>       tune + view a frequency (e.g. freq 5843)
-  list             list all channels
-  sdr <NAME>       switch radio (uhd|hackrf|bladerf)
-  gain <dB>        RX gain (HackRF drives LNA+VGA)
-  lna <dB>         HackRF LNA 0-40, optional override
-  vga <dB>         HackRF VGA 0-62, optional override
-  dwell <SEC>      per-channel scan time (def 0.08)
-  margin <dB>      detect threshold over floor (def 12)
-  record <file>    record video; bare 'record' = off
-  rotate <deg>     0|90|180|270 (def 0)
-  contrast <x>     demod contrast (def 0.8)
-  log              show scan log
-  quit             exit
-```
-
-<img width="1050" height="324" alt="s" src="https://github.com/user-attachments/assets/f8eb754b-ada8-4e3a-843b-f0bcada306dd" />
 
 
 ## Install
@@ -127,6 +98,8 @@ Flags (each also a `FPV_*` env var): `--sdr <name>` · `--gain <dB>` (default Ha
 `--lna`/`--vga`/`--amp` (optional HackRF overrides) · `--samp-rate <Hz>` · `--margin <dB>` ·
 `--dev-args <str>` · `--antenna <name>` · `FPV_CONFIRM=cv|ntsc|snr`.
 
+
+
 ### How scanning works
 `scan` is headless — no window while it searches. Instead of stepping through all ~56
 channels, the detector takes a few wideband **FFT snapshots** (≈24 chunks of 16 MHz cover
@@ -144,6 +117,11 @@ radio at a time — the detector releases it before the viewer opens. `sweep` ru
 survey but only prints the per-channel RSSI/SNR table (no gating, no video).
 
 ### Commands
+
+
+<img width="934" height="392" alt="Screenshot 2026-06-14 at 12 33 05 PM" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
+
+
 - `scan` — headless FFT sweep; window opens only on a confirmed valid signal
 - `scan loop [SEC]` — re-sweep until a signal; Ctrl-C/ENTER stops; `SEC` auto-stops
 - `sweep` — fast FFT RSSI/SNR survey of all channels (no video)
@@ -160,6 +138,7 @@ survey but only prints the per-channel RSSI/SNR table (no gating, no video).
 - `rotate <deg>` / `contrast <x>` / `record <file>` — video display + capture
 - `log` — view scan history
 - `quit` — exit
+
 
 ### Channels (64 across 8 bands)
 Raceband R1–R8 (5658–5917) · Band A A1–A8 (5725–5865) · Band B B1–B8 (5733–5866) ·
