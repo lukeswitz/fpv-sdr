@@ -18,6 +18,7 @@ ROTATE="${FPV_ROTATE:-0}"
 CONTRAST="${FPV_CONTRAST:-0.8}"
 MARGIN="${FPV_MARGIN:-12}"
 SETTLE="${FPV_SETTLE:-0.2}"
+CONFIRM="${FPV_CONFIRM:-}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
@@ -166,6 +167,7 @@ scan_channels() {
             --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
             ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
             --settle "$SETTLE" --margin "$MARGIN" \
+            ${CONFIRM:+--confirm "$CONFIRM"} \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
             "${tokens[@]}" 2>/dev/null
@@ -242,6 +244,7 @@ scan_loop() {
                 --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
                 ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
                 --settle "$SETTLE" --margin "$MARGIN" \
+                ${CONFIRM:+--confirm "$CONFIRM"} \
                 ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
                 ${ANTENNA:+--antenna "$ANTENNA"} \
                 "${tokens[@]}" 2>/dev/null

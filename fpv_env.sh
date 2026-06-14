@@ -7,6 +7,12 @@ resolve_fpv_python() {
     fi
 
     if command -v python3 >/dev/null 2>&1 && python3 -c "import gnuradio.gr" >/dev/null 2>&1; then
+        local pyver oot
+        pyver=$(python3 -c 'import sys;print("python%d.%d"%sys.version_info[:2])' 2>/dev/null)
+        if [[ -n "$pyver" ]]; then
+            oot="${HOME}/.local/lib/${pyver}/site-packages"
+            [[ -d "$oot" ]] && export PYTHONPATH="${oot}${PYTHONPATH:+:$PYTHONPATH}"
+        fi
         PYTHON="python3"
         return 0
     fi

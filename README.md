@@ -4,24 +4,41 @@ NTSC 5.8 GHz FPV video receiver and scanner for ANTSDR E200 using GNU Radio.
 
 ## Prerequisites
 
-- ANTSDR configured with **UHD firmware** 
-- GNU Radio and UHD drivers (pre-installed on WarDragon)
-- Specified PR of gr-ntsc-rc
+- ANTSDR configured with **UHD firmware**
+- GNU Radio (3.10/3.11) and UHD drivers (pre-installed on WarDragon / DragonOS)
+- `gr-ntsc-rc` NTSC decoder (PR6 — see Installation; **already bundled on DragonOS**)
+- For SoapySDR radios (HackRF / BladeRF): `gr-soapy` + the matching `SoapyHackRF` / `SoapyBladeRF` plugin
+- Python host deps: `numpy`, `Pillow` (`pip3 install -r requirements.txt`)
+- `ffmpeg` — used for the live viewer window and recording when GNU Radio's `video_sdl` sink is absent
 
-## Installation
+## Installation (Linux / WarDragon / DragonOS)
 ```bash
-# Clone gr-ntsc-rc decoder module
-git clone https://github.com/lscardoso/gr-ntsc-rc.git
-cd gr-ntsc-rc
-git fetch origin pull/6/head:pr6
-git checkout pr6
-
-# Clone Dragon FPV Decoder
+# 1. Clone Dragon FPV Decoder
 cd ~/
 git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
 cd dragon-fpv-decoder
-chmod +x fpv_scanner.sh
+chmod +x fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py
+
+# 2. Python host-decode deps
+pip3 install -r requirements.txt          # numpy + Pillow
+sudo apt install ffmpeg                    # live window / recording (when video_sdl is absent)
+
+# 3. Build the gr-ntsc-rc NTSC decoder — SKIP if already present (DragonOS ships it)
+python3 -c "import gnuradio.NTSC" 2>/dev/null && echo "NTSC already installed — skip" || {
+  cd ~/
+  git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc
+  git fetch origin pull/6/head:pr6 && git checkout pr6     # PR6 bumps it to GNU Radio 3.10/3.11
+  git apply ~/dragon-fpv-decoder/patches/gr-ntsc-rc-converter-bounds.patch   # crash fix (see below)
+  mkdir build && cd build
+  cmake .. && make -j"$(nproc)" && sudo make install && sudo ldconfig
+  cd ~/dragon-fpv-decoder
+}
 ```
+
+The converter-bounds patch fixes an out-of-bounds read in the gr-ntsc-rc video stream
+converter (it reads `1.93 × noutput` input samples from a buffer holding only `noutput`),
+which segfaults on a marginal signal — clean ANTSDR signals get lucky and never crash.
+Apply it on the **WarDragon/ANTSDR** build too so its `video_sdl` decode path is crash-proof.
 
 ## Verify ANTSDR Connection
 ```bash
@@ -105,7 +122,7 @@ A channel counts as a **valid signal** (not merely the loudest) only when it cle
 
 1. **SNR** — in-band power ≥ `--margin` dB over the measured noise floor (default 12).
 2. **Narrow-peak** — the carrier is a localized hump above its shoulders, which rejects broadband Wi-Fi that can out-power a real FPV carrier.
-3. **Carrier confirm** — on HackRF, a **constant-envelope (FM) test**: analog FPV is frequency-modulated, so its in-band amplitude is near-constant (low coefficient-of-variation), while Wi-Fi/OFDM and noise are not. On UHD / other SDRs, the NTSC decoder **sync-lock** is used instead.
+3. **Carrier confirm** — on any **SoapySDR** radio (HackRF, BladeRF), a **constant-envelope (FM) test**: analog FPV is frequency-modulated, so its in-band amplitude is near-constant (low coefficient-of-variation), while Wi-Fi/OFDM and noise are not. On **UHD** (ANTSDR/USRP) the NTSC decoder **sync-lock** is used instead. Override the method with `FPV_CONFIRM=cv|ntsc|snr` (or `fpv_detect.py --confirm …`) — `cv` works on any radio, `snr` skips the confirm and accepts on SNR + narrow-peak alone.
 
 The true carrier center is then found by an FFT energy-centroid and mapped to the nearest channel (a VTX radiating a few MHz off-nominal is still identified, with the offset reported). The window opens **only** on a confirmed channel; with no valid carrier it prints `No FPV signals`. One process owns the radio at a time — the detector releases it before the viewer opens.
 
@@ -160,9 +177,13 @@ Decoding runs entirely on the **host CPU** in GNU Radio — the SDR only tunes, 
 ## Architecture
 
 - `fpv_scanner.sh` — interactive orchestrator (channel tables, scan/view handoff, single-radio-owner management)
-- `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak shape gate, plus FM constant-envelope confirm on HackRF / NTSC sync-lock on UHD); opens no window
+- `fpv_env.sh` — resolves the Python that has GNU Radio bindings and wires the numpy / `~/.local` out-of-tree paths (sourced by the scanner)
+- `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak shape gate, plus an FM constant-envelope confirm on any SoapySDR radio / NTSC sync-lock on UHD); opens no window
 - `fpv_viewer.py` — gated video viewer; opens one window for one confirmed channel
+- `fpv_display.py` — `frame_sink` GNU Radio block: assembles decoded NTSC frames and pushes them to a live `ffplay` window, PNG snapshots, and/or an `ffmpeg` recording (used when `video_sdl` is unavailable)
+- `fpv_spectrum.py` — pure terminal spectrum renderer (Unicode blocks + truecolor; no GNU Radio dependency)
 - `fpv_sdr.py` — shared UHD/SoapySDR source factory
+- `fpv_tune.py` / `fpv_tune.sh` — standalone manual-tune helper (not used by the scanner)
 - `top_block.py` — original standalone UHD flowgraph (kept for reference; not used by the scanner)
 
 ## Features
@@ -170,7 +191,7 @@ Decoding runs entirely on the **host CPU** in GNU Radio — the SDR only tunes, 
 - Real-time NTSC video decoding with live display
 - **Signal-gated scanning** — headless detection, no blank windows; the video window opens only on a confirmed signal
 - **Wideband FFT sweep** — a few 16 MHz snapshots survey the whole band instead of stepping channel-by-channel
-- **Validity gate** — SNR over the noise floor + narrow-peak shape (rejects Wi-Fi), plus a constant-envelope FM test on HackRF / NTSC sync-lock on UHD
+- **Validity gate** — SNR over the noise floor + narrow-peak shape (rejects Wi-Fi), plus a constant-envelope FM test on SoapySDR radios (HackRF/BladeRF) / NTSC sync-lock on UHD (override with `FPV_CONFIRM`)
 - **Carrier-centroid channel ID** — measures the true center and reports any off-nominal VTX offset
 - **Multi-SDR** — UHD (ANTSDR/USRP) and SoapySDR (HackRF/BladeRF) via `--sdr`
 - Modest HackRF gain default (24 dB, AMP off) to keep the front-end out of compression — still fully settable with `gain`/`--lna`/`--vga`

@@ -13,7 +13,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gnuradio import gr, analog, blocks, filter
 from gnuradio.filter import firdes
 from gnuradio.fft import window
-import gnuradio.NTSC as NTSC
+
+try:
+    import gnuradio.NTSC as NTSC
+    HAVE_NTSC = True
+except Exception:
+    NTSC = None
+    HAVE_NTSC = False
 
 try:
     from gnuradio import video_sdl
@@ -118,6 +124,15 @@ def main():
     ap.add_argument('--contrast', type=float, default=1.0,
                     help='multiply the quad-demod gain to match the decoder sync/black/white levels')
     args = ap.parse_args()
+
+    if not HAVE_NTSC:
+        sys.stderr.write(
+            "[viewer] gnuradio.NTSC not built — the viewer needs the gr-ntsc-rc decoder.\n"
+            "         Build it (see README 'Installation'):\n"
+            "           git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc\n"
+            "           git fetch origin pull/6/head:pr6 && git checkout pr6\n"
+            "           mkdir build && cd build && cmake .. && make && sudo make install && sudo ldconfig\n")
+        sys.exit(2)
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
                 args.dev_args, args.antenna, frame_out=args.frame_out,

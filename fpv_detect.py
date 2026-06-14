@@ -23,7 +23,7 @@ except Exception:
     NTSC = None
     HAVE_NTSC = False
 
-from fpv_sdr import build_source, quad_demod_gain
+from fpv_sdr import build_source, quad_demod_gain, UHD_ALIASES
 import fpv_spectrum
 
 
@@ -90,6 +90,7 @@ class detector(gr.top_block):
         gr.top_block.__init__(self, "FPV Detector", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.is_hackrf = (str(sdr).lower() == 'hackrf')
+        self.is_uhd = (str(sdr).lower() in UHD_ALIASES)
 
         self.src, self._retune = build_source(
             samp_rate, start_freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna,
@@ -98,7 +99,7 @@ class detector(gr.top_block):
         pwr_win = max(1, int(samp_rate * 0.005))
         lock_win = max(1, int(samp_rate * 0.02))
 
-        self.have_lock = HAVE_NTSC and not self.is_hackrf
+        self.have_lock = HAVE_NTSC and self.is_uhd
 
         self.dcblock = filter.dc_blocker_cc(32, True)
         self.connect(self.src, self.dcblock)
@@ -357,6 +358,10 @@ def main():
                     help='min in-band minus shoulder power (dB) — rejects broadband Wi-Fi')
     ap.add_argument('--env-cv', type=float, default=0.35,
                     help='hackrf: max in-band envelope CV to accept (analog FPV is near-constant-envelope FM)')
+    ap.add_argument('--confirm', choices=('auto', 'cv', 'ntsc', 'snr'), default='auto',
+                    help='carrier confirm method: auto (UHD->NTSC-lock, any Soapy SDR->FM '
+                         'envelope-CV), cv (force FM constant-envelope), ntsc (force NTSC '
+                         'sync-lock), snr (SNR+narrow-peak only)')
     ap.add_argument('--usable-frac', type=float, default=0.8,
                     help='fraction of the sample rate kept per FFT chunk (drops rolled-off band edges)')
     ap.add_argument('--in-bw', type=float, default=10e6,
@@ -413,10 +418,11 @@ def main():
         sys.stderr.write("[detect] no valid channels\n")
         return 2
 
-    if not HAVE_NTSC and not (args.sdr or '').lower() == 'hackrf':
+    if not HAVE_NTSC and (args.sdr or '').lower() in UHD_ALIASES \
+            and args.confirm in ('auto', 'ntsc'):
         sys.stderr.write(
-            "[detect] gnuradio.NTSC not built — power+shape survey only, no sync-lock "
-            "confirmation (build gr-ntsc-rc to enable it for non-hackrf SDRs)\n")
+            "[detect] gnuradio.NTSC not built — UHD carrier confirm falls back to "
+            "SNR+narrow-peak only (build gr-ntsc-rc to enable NTSC sync-lock)\n")
 
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna,
@@ -431,6 +437,15 @@ def main():
     signal.signal(signal.SIGTERM, _clean_exit)
 
     tb.start()
+
+    confirm = args.confirm
+    if confirm == 'auto':
+        if tb.have_lock:
+            confirm = 'ntsc'
+        elif not tb.is_uhd:
+            confirm = 'cv'
+        else:
+            confirm = 'snr'
 
     usable = args.samp_rate * args.usable_frac
     n_chunks = len(chunk_plan([f for _, f in chans], usable))
@@ -532,18 +547,18 @@ def main():
                 name, freq = nearest_channel(chans, center, hit_names)
                 tb.retune(center)
                 time.sleep(args.settle)
-                if tb.is_hackrf:
+                if confirm == 'cv':
                     cv = tb.envelope_cv(args.lock_dwell)
                     ok = cv <= args.env_cv
                     mlabel = "env-CV %.2f (<=%.2f)" % (cv, args.env_cv)
-                elif tb.have_lock:
+                elif confirm == 'ntsc' and tb.have_lock:
                     time.sleep(args.lock_dwell)
                     lk = tb.lock_metric()
                     ok = lk >= args.lock_thresh
                     mlabel = "NTSC-lock %.2f (>=%.2f)" % (lk, args.lock_thresh)
                 else:
                     ok = True
-                    mlabel = "SNR-only (no FM/NTSC confirm built)"
+                    mlabel = "SNR-only (no FM/NTSC confirm)"
                 print("DETECT CENTER %.0f %.1f 0 fft" % (center, cand[2]),
                       flush=True)
                 sys.stderr.write(
