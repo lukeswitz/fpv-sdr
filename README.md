@@ -150,7 +150,7 @@ Decoding runs entirely on the **host CPU** — the SDR only tunes, samples, and 
 There is **no on-FPGA decode**, so FPGA size is irrelevant (a common misconception). Any
 radio that reaches 5.8 GHz and streams ~18–20 MHz of bandwidth works.
 
-| SDR | 5.8 GHz | Bandwidth / ADC | Driver | `--sdr` | Verdict |
+| SDR | 5.8 GHz | Max BW / ADC (hardware) | Driver | `--sdr` | Verdict |
 |-----|:------:|-----------------|--------|---------|---------|
 | ANTSDR E200 | ✅ | 56 MHz / 12-bit | UHD | `uhd` | Reference |
 | USRP B210 / B200mini | ✅ | 56 MHz / 12-bit | UHD | `uhd` | Best drop-in |
@@ -158,6 +158,11 @@ radio that reaches 5.8 GHz and streams ~18–20 MHz of bandwidth works.
 | HackRF One | ✅ | 20 MHz / 8-bit | SoapySDR | `hackrf` | Works (tight BW; 8-bit fine for FM) |
 | ADALM-Pluto | ⚠️ hacked fw | 56 MHz / 12-bit | UHD/IIO | `uhd` | Only if already owned |
 | LimeSDR / RTL-SDR / Airspy / SDRplay | ❌ | — | — | — | Cannot reach 5.8 GHz |
+
+The **Max BW / ADC** column is each radio's hardware ceiling, not what the tool runs. The
+scanner actually uses **40 MHz for detection/sweep/spectrum** (HackRF **20 MHz**, its maximum)
+and **10 MHz for decoding** — comfortably within every supported radio. The 56 MHz figures are
+headroom, never used; override with `FPV_DETECT_SAMP_RATE` / `--samp-rate` if you want.
 
 **HackRF gains** use three stages — `AMP` (0/+14 dB), `LNA` (0–40), `VGA` (0–62). `--gain`
 drives LNA+VGA; default is a modest **24 dB, AMP OFF** (40 pinned the floor near −10…−20 dBFS
