@@ -26,6 +26,9 @@ except Exception:
 from fpv_sdr import build_source, quad_demod_gain, UHD_ALIASES
 import fpv_spectrum
 
+if hasattr(gr, 'logging') and hasattr(gr, 'log_levels'):
+    gr.logging().set_default_level(gr.log_levels.critical)
+
 
 def integrate_psd(psd, center, samp_rate, freq, in_bw, sh_bw):
     n = len(psd)
