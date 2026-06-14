@@ -65,7 +65,42 @@ doctor() {
 install_mac() {
     have brew || { err "Install Homebrew first: https://brew.sh"; exit 1; }
     say "Installing GNU Radio + SDR stack via Homebrew"
-    need brew install gnuradio soapysdr uhd ffmpeg bash cmake pybind11 soapyhackrf soapybladerf
+    export HOMEBREW_NO_AUTO_UPDATE=1
+    need brew install gnuradio soapysdr uhd ffmpeg bash cmake pybind11 hackrf libbladerf
+    warn "SoapyHackRF/SoapyBladeRF are built from source below — the Homebrew tap formulae"
+    warn "pull an extra python and fail on modern CMake, so they are deliberately avoided."
+}
+
+build_soapy_module() {
+    local name="$1" repo="$2" factory="$3" brewpfx
+    if SoapySDRUtil --info 2>/dev/null | grep -qi "$factory"; then
+        ok "Soapy $factory driver already present — skip"
+        return
+    fi
+    brewpfx="$(brew --prefix)"
+    say "Building $name from source (C++ only — pulls no python)"
+    local src="${HOME}/.cache/dragon-fpv/$name"
+    mkdir -p "$(dirname "$src")"
+    [[ -d "$src/.git" ]] || need git clone --depth 1 "$repo" "$src"
+    cd "$src" || { err "cannot enter $src"; exit 1; }
+    need cmake -B build \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+        -DCMAKE_PREFIX_PATH="$brewpfx" \
+        -DCMAKE_INSTALL_PREFIX="$brewpfx"
+    need cmake --build build -j"$(sysctl -n hw.ncpu)"
+    need cmake --install build
+    cd "$PROJECT_DIR" || exit 1
+    if SoapySDRUtil --info 2>/dev/null | grep -qi "$factory"; then
+        ok "$factory driver installed"
+    else
+        warn "$factory still not listed — check the build output above"
+    fi
+}
+
+build_soapy_modules_mac() {
+    have SoapySDRUtil || { warn "SoapySDR not found — skipping SDR driver builds"; return; }
+    build_soapy_module SoapyHackRF  https://github.com/pothosware/SoapyHackRF.git  hackrf
+    build_soapy_module SoapyBladeRF https://github.com/pothosware/SoapyBladeRF.git bladerf
 }
 
 install_linux() {
@@ -122,6 +157,7 @@ build_ntsc() {
         brewpfx="$(brew --prefix)"
         pyver="$("$PYTHON" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
         need cmake -B build \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_PREFIX_PATH="$brewpfx" \
             -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
             -DPYTHON_EXECUTABLE="$PYTHON" \
@@ -129,7 +165,7 @@ build_ntsc() {
         need cmake --build build -j"$(sysctl -n hw.ncpu)"
         need cmake --install build
     else
-        need cmake -B build
+        need cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         need cmake --build build -j"$(nproc)"
         need sudo cmake --install build
         sudo ldconfig || true
@@ -149,6 +185,7 @@ case "$OS" in
     *) err "Unsupported OS: $OS"; exit 1 ;;
 esac
 install_pydeps
+[[ "$OS" == Darwin ]] && build_soapy_modules_mac
 build_ntsc
 chmod +x fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py
 

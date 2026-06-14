@@ -22,53 +22,66 @@ Then type `scan` — no video window opens until a real FPV signal is confirmed.
 stack, and builds gr-ntsc-rc. The manual steps below are for reference, non-apt Linux, or
 custom setups. (`./setup.sh --check` audits an existing install without changing anything.)
 
-Nothing here is OS-specific. Install GNU Radio and your SDR's driver with your package
-manager, add the Python deps, then build the NTSC decoder once — same steps and same
-runtime behavior on Linux and macOS.
+`./setup.sh` is the supported path and handles both OSes. The manual steps below mirror exactly
+what it does — use them for reference, non-apt Linux, or a custom setup.
 
-**1 — GNU Radio + SDR drivers + ffmpeg**
+### Linux (Debian / Ubuntu / DragonOS)
+SoapySDR's apt modules are prebuilt and use the system Python, so there are **no build errors
+and no duplicate Python install**.
 ```bash
-# Debian / Ubuntu / DragonOS
-sudo apt install gnuradio gr-soapy uhd-host ffmpeg \
-                 soapysdr-module-hackrf soapysdr-module-bladerf
-
-# macOS (Homebrew)
-brew install gnuradio soapysdr uhd ffmpeg bash cmake pybind11 \
-             soapyhackrf soapybladerf
-```
-Install only the SDR drivers you use — UHD covers ANTSDR/USRP, SoapySDR covers HackRF/BladeRF.
-ANTSDR also needs UHD firmware; confirm with `ping 192.168.1.10 && uhd_find_devices`.
-
-**2 — this tool + Python deps**
-```bash
+sudo apt install gnuradio gr-soapy uhd-host ffmpeg cmake g++ git \
+                 soapysdr-module-hackrf soapysdr-module-bladerf \
+                 python3-numpy python3-pil
 git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
 cd dragon-fpv-decoder && chmod +x fpv_scanner.sh
-pip3 install -r requirements.txt        # numpy, Pillow
-```
 
-**3 — gr-ntsc-rc decoder** — skip if `python3 -c "import gnuradio.NTSC"` already works (DragonOS bundles it):
-```bash
+# gr-ntsc-rc — skip if `python3 -c "import gnuradio.NTSC"` already works (DragonOS bundles it):
 git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc
 git fetch origin pull/6/head:pr6 && git checkout pr6        # PR6 = GNU Radio 3.10/3.11
 git apply ~/dragon-fpv-decoder/patches/gr-ntsc-rc-converter-bounds.patch
-cmake -B build && cmake --build build -j"$(nproc)" && sudo cmake --install build && sudo ldconfig
+cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build build -j"$(nproc)" && sudo cmake --install build && sudo ldconfig
 ```
-The patch fixes an out-of-bounds read in the video stream converter (it reads `1.93 × noutput`
-samples from an `noutput` buffer) that segfaults on a marginal signal. Apply it on every build.
 
-`fpv_env.sh` finds the right Python automatically — system `python3` on Linux, Homebrew's on
-macOS — and wires the numpy / `~/.local` paths; set `FPV_PYTHON` to override.
+### macOS (Homebrew)
+> **Do not `brew install soapyhackrf` / `soapybladerf`.** Those tap formulae depend on
+> SoapySDR's Python and will silently **upgrade your `python@3.14` (a duplicate keg that can
+> shadow your GNU Radio Python)**, and their CMake predates 3.5 so they **fail to build** on
+> current CMake. Build the two modules from source instead — they are C++ only and pull no
+> Python. `setup.sh` does exactly this.
 
-> **macOS note.** Homebrew GNU Radio ships neither `gnuradio.NTSC` nor `video_sdl`, and its
-> Python is keg-isolated — so build gr-ntsc-rc into your user prefix and point cmake at brew's
-> Python:
-> ```bash
-> cmake -B build -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_INSTALL_PREFIX=$HOME/.local \
->   -DPYTHON_EXECUTABLE=/opt/homebrew/opt/python@3.14/bin/python3.14 \
->   -DGR_PYTHON_DIR=$HOME/.local/lib/python3.14/site-packages
-> cmake --build build -j4 && cmake --install build
-> ```
-> With no `video_sdl` the viewer falls back to a live `ffplay` window — same decode, different sink.
+```bash
+brew install gnuradio soapysdr uhd ffmpeg bash cmake pybind11 hackrf libbladerf
+git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
+cd dragon-fpv-decoder && chmod +x fpv_scanner.sh
+PFX="$(brew --prefix)"
+PY="$PFX/opt/python@3.14/bin/python3.14"          # match your brew GNU Radio Python
+"$PY" -m pip install --user -r requirements.txt   # numpy, Pillow
+
+# SoapyHackRF + SoapyBladeRF from source — no Python pulled; the policy flag fixes their old CMake
+for m in SoapyHackRF SoapyBladeRF; do
+  git clone --depth 1 "https://github.com/pothosware/$m.git" ~/"$m"
+  cmake -S ~/"$m" -B ~/"$m/build" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DCMAKE_PREFIX_PATH="$PFX" -DCMAKE_INSTALL_PREFIX="$PFX"
+  cmake --build ~/"$m/build" -j"$(sysctl -n hw.ncpu)" && cmake --install ~/"$m/build"
+done
+
+# gr-ntsc-rc into your user prefix (brew GR ships neither gnuradio.NTSC nor video_sdl)
+git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc
+git fetch origin pull/6/head:pr6 && git checkout pr6
+git apply ~/dragon-fpv-decoder/patches/gr-ntsc-rc-converter-bounds.patch
+cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_PREFIX_PATH="$PFX" -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+  -DPYTHON_EXECUTABLE="$PY" -DGR_PYTHON_DIR="$HOME/.local/lib/python3.14/site-packages"
+cmake --build build -j"$(sysctl -n hw.ncpu)" && cmake --install build
+```
+With no `video_sdl`, the viewer uses a live `ffplay` window instead of the SDL sink — same decode.
+
+The converter-bounds patch fixes an out-of-bounds read in the video stream converter (it reads
+`1.93 × noutput` samples from an `noutput` buffer) that segfaults on a marginal signal — apply it
+on every build. `fpv_env.sh` finds the right Python automatically (system `python3` on Linux,
+Homebrew's on macOS) and wires the numpy / `~/.local` paths; set `FPV_PYTHON` to override.
+ANTSDR also needs UHD firmware; confirm with `ping 192.168.1.10 && uhd_find_devices`.
 
 ## Usage
 ```bash
