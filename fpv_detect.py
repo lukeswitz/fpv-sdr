@@ -105,19 +105,15 @@ class detector(gr.top_block):
         self.dcblock = filter.dc_blocker_cc(32, True)
         self.connect(self.src, self.dcblock)
 
-        self.cvlpf = filter.fir_filter_ccf(
-            1, firdes.low_pass(1, samp_rate, 9e6, 3e6, window.WIN_HAMMING, 6.76))
-        self.connect(self.dcblock, self.cvlpf)
-
         self.mag2 = blocks.complex_to_mag_squared(1)
         self.pwr_avg = blocks.moving_average_ff(pwr_win, 1.0 / pwr_win, 4000, 1)
         self.pwr_probe = blocks.probe_signal_f()
-        self.connect(self.cvlpf, self.mag2, self.pwr_avg, self.pwr_probe)
+        self.connect(self.dcblock, self.mag2, self.pwr_avg, self.pwr_probe)
 
         self.mag = blocks.complex_to_mag(1)
         self.mag_avg = blocks.moving_average_ff(pwr_win, 1.0 / pwr_win, 4000, 1)
         self.mag_probe = blocks.probe_signal_f()
-        self.connect(self.cvlpf, self.mag, self.mag_avg, self.mag_probe)
+        self.connect(self.dcblock, self.mag, self.mag_avg, self.mag_probe)
 
         self.center = start_freq
         self.loc_nfft = loc_nfft
@@ -361,8 +357,9 @@ def main():
                     help='min SNR (dB over the noise floor) for a channel to be a candidate')
     ap.add_argument('--peak-thresh', type=float, default=3.0,
                     help='min in-band minus shoulder power (dB) — rejects broadband Wi-Fi')
-    ap.add_argument('--env-cv', type=float, default=0.35,
-                    help='hackrf: max in-band envelope CV to accept (analog FPV is near-constant-envelope FM)')
+    ap.add_argument('--env-cv', type=float, default=0.8,
+                    help='max envelope CV to accept as FPV. Measured on-air: real analog '
+                         'FPV reads ~0.3-0.56, Wi-Fi/OFDM reads ~1.2-3.2; 0.8 sits in that gap')
     ap.add_argument('--confirm', choices=('auto', 'cv', 'ntsc', 'snr'), default='auto',
                     help='carrier confirm: auto (FM envelope-CV gate, plus NTSC sync-lock '
                          'as an ADDITIVE second pass where the decoder is built — lock can '
