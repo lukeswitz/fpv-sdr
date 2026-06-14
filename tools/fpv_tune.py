@@ -7,7 +7,7 @@ import sys
 import time
 import argparse
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fpv_viewer import viewer
 
 HELP = """commands (type and Enter):

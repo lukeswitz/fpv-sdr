@@ -196,8 +196,8 @@ for the best image — the ANTSDR captures the full signal and decodes cleaner.
 - `fpv_display.py` — `frame_sink` block: decoded frames → live `ffplay` window, PNG snapshots, and/or `ffmpeg` recording (when `video_sdl` is absent)
 - `fpv_spectrum.py` — pure terminal spectrum renderer (Unicode blocks + truecolor; no GNU Radio dependency)
 - `fpv_sdr.py` — shared UHD/SoapySDR source factory
-- `fpv_tune.py` / `fpv_tune.sh` — standalone manual-tune helper (not used by the scanner)
-- `top_block.py` — original standalone UHD flowgraph (kept for reference; not used by the scanner)
+- `tools/fpv_tune.py` / `tools/fpv_tune.sh` — standalone manual-tune helper (not used by the scanner)
+- `reference/top_block.py` / `reference/NTSC_Video_5GHz_RX.grc` — original standalone GNU Radio flowgraph + its GRC source (kept for reference; not used by the scanner)
 
 ## Troubleshooting
 - **No window during a scan** — expected; it's headless until a signal confirms. Watch the per-channel `dBFS`/SNR and `candidate … env-CV/lock … ACCEPT/REJECT` lines. A known-live TX getting rejected → lower `margin 10`, or loosen the FM test `--env-cv 0.4`. Floor near −10…−20 dBFS → gain too high, `gain 16`.
