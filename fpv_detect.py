@@ -86,7 +86,8 @@ def chunk_plan(freqs, usable):
 
 class detector(gr.top_block):
     def __init__(self, sdr, samp_rate, gain, start_freq, dev_args, antenna,
-                 loc_nfft=4096, loc_margin=6.0, lna=None, vga=None, amp=False):
+                 loc_nfft=4096, loc_margin=6.0, lna=None, vga=None, amp=False,
+                 want_lock=True):
         gr.top_block.__init__(self, "FPV Detector", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.is_hackrf = (str(sdr).lower() == 'hackrf')
@@ -99,7 +100,7 @@ class detector(gr.top_block):
         pwr_win = max(1, int(samp_rate * 0.005))
         lock_win = max(1, int(samp_rate * 0.02))
 
-        self.have_lock = HAVE_NTSC and not self.is_hackrf
+        self.have_lock = HAVE_NTSC and not self.is_hackrf and want_lock
 
         self.dcblock = filter.dc_blocker_cc(32, True)
         self.connect(self.src, self.dcblock)
@@ -425,9 +426,12 @@ def main():
             "[detect] gnuradio.NTSC not built — UHD carrier confirm falls back to "
             "SNR+narrow-peak only (build gr-ntsc-rc to enable NTSC sync-lock)\n")
 
+    want_lock = (not args.spectrum and not args.survey_only
+                 and args.confirm in ('auto', 'ntsc'))
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna,
-                  lna=args.lna, vga=args.vga, amp=args.amp)
+                  lna=args.lna, vga=args.vga, amp=args.amp,
+                  want_lock=want_lock)
 
     def _clean_exit(sig=None, frame=None):
         tb.stop()
@@ -534,6 +538,7 @@ def main():
             hit_names = {r[0] for r in cands}
 
             hit = None
+            evals = []
             for cand in cands[:3]:
                 seed = cand[1]
                 if args.localize_dwell > 0:
@@ -580,12 +585,26 @@ def main():
                     % (cand[0], center / 1e6, name, freq / 1e6,
                        (center - freq) / 1e6, cand[3], mlabel,
                        "ACCEPT" if ok else "REJECT"))
-                if ok:
+                if ok and confirm != 'cvlock':
                     print("HIT %s %.0f %.1f" % (name, freq, cand[3]),
                           flush=True)
                     rc = 0
                     hit = (name, freq)
                     break
+                if ok and confirm == 'cvlock':
+                    evals.append((name, freq, cand[3], cv_ok, lk_ok))
+
+            if hit is None and confirm == 'cvlock' and evals:
+                locked = next((e for e in evals if e[4]), None)
+                chosen = locked if locked else evals[0]
+                sys.stderr.write(
+                    "[detect] selected %s (%s; %d candidate(s) passed)\n"
+                    % (chosen[0], "NTSC-locked" if chosen[4] else "FM-confirmed",
+                       len(evals)))
+                print("HIT %s %.0f %.1f" % (chosen[0], chosen[1], chosen[2]),
+                      flush=True)
+                rc = 0
+                hit = (chosen[0], chosen[1])
 
             if hit is None:
                 if cands:
