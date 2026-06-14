@@ -199,7 +199,7 @@ scan_channels() {
             "${tokens[@]}" 2>"$errf"
     )
 
-    pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+    pkill -TERM -f "fpv_detect.py" >/dev/null 2>&1
     DETECT_PID=""
 
     grep -E "candidate |selected " "$errf" 2>/dev/null | sed 's/.*\[detect\] /  /'
@@ -277,7 +277,7 @@ scan_loop() {
                 ${ANTENNA:+--antenna "$ANTENNA"} \
                 "${tokens[@]}" 2>/dev/null
         )
-        pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
+        pkill -TERM -f "fpv_detect.py" >/dev/null 2>&1
         DETECT_PID=""
 
         [[ -n "$hit_name" ]] && break
