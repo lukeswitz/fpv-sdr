@@ -99,7 +99,7 @@ class detector(gr.top_block):
         pwr_win = max(1, int(samp_rate * 0.005))
         lock_win = max(1, int(samp_rate * 0.02))
 
-        self.have_lock = HAVE_NTSC and self.is_uhd
+        self.have_lock = HAVE_NTSC and not self.is_hackrf
 
         self.dcblock = filter.dc_blocker_cc(32, True)
         self.connect(self.src, self.dcblock)
