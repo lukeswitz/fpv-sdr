@@ -103,7 +103,7 @@ the whole band) and reads every channel inside each chunk from one capture. A ch
 
 1. **SNR** — in-band power ≥ `--margin` dB over the measured noise floor (default 12).
 2. **Narrow-peak** — a localized hump above its shoulders; rejects broadband Wi-Fi that can out-power a real FPV carrier.
-3. **Carrier confirm** — SoapySDR radios (HackRF/BladeRF) use a **constant-envelope FM test** (analog FPV is near-constant amplitude; Wi-Fi/OFDM and noise are not); UHD uses the NTSC **sync-lock**. Override with `FPV_CONFIRM` / `--confirm` — `cv` works on any radio, `snr` accepts on SNR + narrow-peak alone.
+3. **Carrier confirm** — a **constant-envelope FM test** (analog FPV is near-constant amplitude; Wi-Fi/OFDM and noise are not) is the gate on every radio. Where the NTSC decoder is built (ANTSDR/USRP, BladeRF) a **sync-lock** runs as an **additive** second pass: a lock can *rescue* a borderline signal but can never reject one the FM test accepts, so a flaky lock can't hide a real channel. Override with `FPV_CONFIRM` / `--confirm` — `cv` (FM only), `ntsc` (lock only), `snr` (no carrier confirm).
 
 The true carrier center is then found by an FFT energy-centroid and mapped to the nearest
 channel (an off-nominal VTX is still identified, with the offset reported). The window opens
@@ -159,7 +159,7 @@ for the best image — the ANTSDR captures the full signal and decodes cleaner.
 - `setup.sh` — one-command installer (macOS/Linux); `--check` audits an existing install
 - `fpv_scanner.sh` — interactive orchestrator (channel tables, scan/view handoff, single-radio-owner management)
 - `fpv_env.sh` — resolves the Python with GNU Radio bindings and wires the numpy / `~/.local` paths (sourced by the scanner)
-- `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak gate, plus FM constant-envelope confirm on SoapySDR / NTSC sync-lock on UHD); opens no window
+- `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak gate + FM constant-envelope confirm, plus an additive NTSC sync-lock pass where the decoder is built); opens no window
 - `fpv_viewer.py` — gated video viewer; opens one window for one confirmed channel
 - `fpv_display.py` — `frame_sink` block: decoded frames → live `ffplay` window, PNG snapshots, and/or `ffmpeg` recording (when `video_sdl` is absent)
 - `fpv_spectrum.py` — pure terminal spectrum renderer (Unicode blocks + truecolor; no GNU Radio dependency)

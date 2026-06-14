@@ -359,9 +359,10 @@ def main():
     ap.add_argument('--env-cv', type=float, default=0.35,
                     help='hackrf: max in-band envelope CV to accept (analog FPV is near-constant-envelope FM)')
     ap.add_argument('--confirm', choices=('auto', 'cv', 'ntsc', 'snr'), default='auto',
-                    help='carrier confirm method: auto (UHD->NTSC-lock, any Soapy SDR->FM '
-                         'envelope-CV), cv (force FM constant-envelope), ntsc (force NTSC '
-                         'sync-lock), snr (SNR+narrow-peak only)')
+                    help='carrier confirm: auto (FM envelope-CV gate, plus NTSC sync-lock '
+                         'as an ADDITIVE second pass where the decoder is built — lock can '
+                         'only help accept, never reject); cv (force CV only); ntsc (force '
+                         'NTSC-lock only); snr (SNR+narrow-peak only, no carrier confirm)')
     ap.add_argument('--usable-frac', type=float, default=0.8,
                     help='fraction of the sample rate kept per FFT chunk (drops rolled-off band edges)')
     ap.add_argument('--in-bw', type=float, default=10e6,
@@ -441,7 +442,7 @@ def main():
     confirm = args.confirm
     if confirm == 'auto':
         if tb.have_lock:
-            confirm = 'ntsc'
+            confirm = 'cvlock'
         elif not tb.is_uhd:
             confirm = 'cv'
         else:
@@ -547,18 +548,30 @@ def main():
                 name, freq = nearest_channel(chans, center, hit_names)
                 tb.retune(center)
                 time.sleep(args.settle)
-                if confirm == 'cv':
+                cv = None
+                lk = None
+                if confirm in ('cv', 'cvlock'):
                     cv = tb.envelope_cv(args.lock_dwell)
-                    ok = cv <= args.env_cv
-                    mlabel = "env-CV %.2f (<=%.2f)" % (cv, args.env_cv)
-                elif confirm == 'ntsc' and tb.have_lock:
-                    time.sleep(args.lock_dwell)
+                if confirm in ('ntsc', 'cvlock') and tb.have_lock:
+                    if confirm == 'ntsc':
+                        time.sleep(args.lock_dwell)
                     lk = tb.lock_metric()
-                    ok = lk >= args.lock_thresh
-                    mlabel = "NTSC-lock %.2f (>=%.2f)" % (lk, args.lock_thresh)
+                cv_ok = cv is not None and cv <= args.env_cv
+                lk_ok = lk is not None and lk >= args.lock_thresh
+                if confirm == 'cv':
+                    ok = cv_ok
+                elif confirm == 'ntsc':
+                    ok = lk_ok
+                elif confirm == 'cvlock':
+                    ok = cv_ok or lk_ok
                 else:
                     ok = True
-                    mlabel = "SNR-only (no FM/NTSC confirm)"
+                parts = []
+                if cv is not None:
+                    parts.append("env-CV %.2f%s" % (cv, " ok" if cv_ok else " no"))
+                if lk is not None:
+                    parts.append("NTSC-lock %.2f%s" % (lk, " ok" if lk_ok else " no"))
+                mlabel = " + ".join(parts) if parts else "SNR+peak only"
                 print("DETECT CENTER %.0f %.1f 0 fft" % (center, cand[2]),
                       flush=True)
                 sys.stderr.write(
