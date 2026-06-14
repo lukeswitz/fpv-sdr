@@ -98,11 +98,7 @@ build_soapy_module() {
     need cmake --build build -j"$(sysctl -n hw.ncpu)"
     need cmake --install build
     cd "$PROJECT_DIR" || exit 1
-    if SoapySDRUtil --info 2>/dev/null | grep -qi "$factory"; then
-        ok "$factory driver installed"
-    else
-        warn "$factory still not listed — check the build output above"
-    fi
+    ok "$name built + installed (final --check below lists the $factory driver)"
 }
 
 build_soapy_modules_mac() {
