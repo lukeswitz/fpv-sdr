@@ -91,7 +91,7 @@ ANTSDR also needs UHD firmware; confirm with `ping 192.168.1.10 && uhd_find_devi
 ./fpv_scanner.sh --sdr hackrf
 ./fpv_scanner.sh --sdr bladerf --gain 30
 ```
-Flags (each also a `FPV_*` env var): `--sdr <name>` · `--gain <dB>` (HackRF 24, UHD 40) ·
+Flags (each also a `FPV_*` env var): `--sdr <name>` · `--gain <dB>` (default HackRF 24, BladeRF 20, ANTSDR/UHD 30 — low to avoid clipping strong nearby VTXs) ·
 `--lna`/`--vga`/`--amp` (optional HackRF overrides) · `--samp-rate <Hz>` · `--margin <dB>` ·
 `--dev-args <str>` · `--antenna <name>` · `FPV_CONFIRM=cv|ntsc|snr`.
 

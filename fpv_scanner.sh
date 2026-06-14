@@ -85,8 +85,9 @@ CURRENT_CHANNEL=""
 resolve_gain() {
     if [[ -z "$GAIN" ]]; then
         case "$SDR" in
-            hackrf) GAIN=24 ;;
-            *) GAIN=40 ;;
+            hackrf)  GAIN=24 ;;
+            bladerf) GAIN=20 ;;
+            *)       GAIN=30 ;;
         esac
     fi
 }
