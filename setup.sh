@@ -133,7 +133,8 @@ install_linux() {
     say "Installing SDR drivers + Python libs (best-effort — a missing one is skipped, not fatal)"
     local opt
     for opt in uhd-host soapysdr-module-hackrf soapysdr-module-bladerf gr-soapy \
-               python3-numpy python3-pil; do
+               python3-numpy python3-pil \
+               gnuradio-dev python3-dev python3-pybind11 libboost-all-dev cmake; do
         if sudo apt-get install -y "$opt" >/dev/null 2>&1; then
             ok "$opt"
         else
