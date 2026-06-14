@@ -122,17 +122,24 @@ build_soapy_modules_mac() {
 install_linux() {
     if ! have apt-get; then
         err "Non-apt Linux detected."
-        echo "  Install with your package manager: gnuradio gr-soapy uhd(-host) ffmpeg"
-        echo "  SoapyHackRF SoapyBladeRF python3-numpy python3-pillow cmake g++ git"
+        echo "  Install with your package manager: gnuradio (includes gr-soapy), uhd, ffmpeg,"
+        echo "  SoapyHackRF, SoapyBladeRF, numpy, Pillow, cmake, g++, git"
         echo "  then re-run:  ./setup.sh --check"
         exit 1
     fi
-    say "Installing GNU Radio + SDR stack via apt (sudo)"
+    say "Installing core GNU Radio + build tools via apt (sudo)"
     need sudo apt-get update
-    need sudo apt-get install -y \
-        gnuradio gr-soapy uhd-host ffmpeg \
-        soapysdr-module-hackrf soapysdr-module-bladerf \
-        python3-numpy python3-pil cmake g++ git pkg-config
+    need sudo apt-get install -y gnuradio ffmpeg cmake g++ git pkg-config
+    say "Installing SDR drivers + Python libs (best-effort — a missing one is skipped, not fatal)"
+    local opt
+    for opt in uhd-host soapysdr-module-hackrf soapysdr-module-bladerf gr-soapy \
+               python3-numpy python3-pil; do
+        if sudo apt-get install -y "$opt" >/dev/null 2>&1; then
+            ok "$opt"
+        else
+            warn "$opt not in your apt repos — skipped (gnuradio bundles SoapySDR; pip covers numpy/Pillow)"
+        fi
+    done
 }
 
 install_pydeps() {

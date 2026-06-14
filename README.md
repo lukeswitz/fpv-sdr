@@ -29,9 +29,9 @@ what it does — use them for reference, non-apt Linux, or a custom setup.
 SoapySDR's apt modules are prebuilt and use the system Python, so there are **no build errors
 and no duplicate Python install**.
 ```bash
-sudo apt install gnuradio gr-soapy uhd-host ffmpeg cmake g++ git \
-                 soapysdr-module-hackrf soapysdr-module-bladerf \
-                 python3-numpy python3-pil
+# gnuradio bundles gr-soapy; the soapysdr-module-* / uhd-host packages are the SDR drivers.
+sudo apt install gnuradio ffmpeg cmake g++ git python3-numpy python3-pil
+sudo apt install uhd-host soapysdr-module-hackrf soapysdr-module-bladerf  # whichever your radios need
 git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
 cd dragon-fpv-decoder && chmod +x fpv_scanner.sh
 
