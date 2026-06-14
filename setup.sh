@@ -64,7 +64,18 @@ doctor() {
         fac="$(SoapySDRUtil --info 2>/dev/null | sed -n 's/.*Available factories\.\.\. //p')"
         ok "SoapySDR factories: ${fac:-none}"
         [[ "$fac" == *hackrf*  ]] || warn "  no hackrf factory  — install SoapyHackRF for HackRF"
-        [[ "$fac" == *bladerf* ]] || warn "  no bladerf factory — install SoapyBladeRF for BladeRF"
+        if [[ "$fac" == *bladerf* ]]; then
+            local nd="$HOME/.config/Nuand/bladeRF"
+            if [[ -e "$nd/hostedxA4.rbf" || -e "$nd/hostedxA9.rbf" ]]; then
+                ok "  bladeRF FPGA image present (autoload name)"
+            elif ls "$nd"/hostedxA*-latest.rbf >/dev/null 2>&1; then
+                warn "  bladeRF FPGA is named *-latest.rbf — libbladeRF won't autoload it; run setup (renames it)"
+            else
+                warn "  bladeRF FPGA image MISSING — device cannot stream until it is loaded (setup fetches it)"
+            fi
+        else
+            warn "  no bladerf factory — install SoapyBladeRF for BladeRF"
+        fi
     else
         warn "SoapySDR not found (needed for HackRF/BladeRF; UHD radios do not need it)"
     fi
@@ -193,6 +204,35 @@ build_ntsc() {
     cd "$PROJECT_DIR" || exit 1
 }
 
+bladerf_fpga() {
+    SoapySDRUtil --info 2>/dev/null | grep -qi bladerf || return 0
+    local cfg="$HOME/.config/Nuand/bladeRF"
+    if [[ -e "$cfg/hostedxA4.rbf" || -e "$cfg/hostedxA9.rbf" ]]; then
+        ok "bladeRF FPGA image present — libbladeRF autoloads it"
+        return 0
+    fi
+    mkdir -p "$cfg"
+    local al
+    for al in "$cfg"/hostedxA4-latest.rbf "$cfg"/hostedxA9-latest.rbf; do
+        if [[ -e "$al" ]]; then
+            need cp "$al" "${al/-latest/}"
+            ok "adopted $(basename "$al") as $(basename "${al/-latest/}") (the name libbladeRF autoloads)"
+            return 0
+        fi
+    done
+    local imgs="hostedxA4 hostedxA9" info
+    if have bladeRF-cli && info="$(bladeRF-cli -e info 2>/dev/null)"; then
+        echo "$info" | grep -q "301" && imgs="hostedxA9"
+        echo "$info" | grep -Eq "\b49\b" && imgs="hostedxA4"
+    fi
+    say "Fetching bladeRF FPGA bitstream ($imgs) — required, loads every power-on"
+    local img
+    for img in $imgs; do
+        need curl -fL "https://www.nuand.com/fpga/${img}-latest.rbf" -o "$cfg/${img}.rbf"
+        ok "$img.rbf -> $cfg"
+    done
+}
+
 if [[ $CHECK_ONLY -eq 1 ]]; then
     doctor || true
     exit 0
@@ -207,6 +247,7 @@ esac
 install_pydeps
 [[ "$OS" == Darwin ]] && build_soapy_modules_mac
 build_ntsc
+bladerf_fpga
 chmod +x fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py
 
 if doctor; then

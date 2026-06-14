@@ -171,6 +171,7 @@ for the best image — the ANTSDR captures the full signal and decodes cleaner.
 - **No window during a scan** — expected; it's headless until a signal confirms. Watch the per-channel `dBFS`/SNR and `candidate … env-CV/lock … ACCEPT/REJECT` lines. A known-live TX getting rejected → lower `margin 10`, or loosen the FM test `--env-cv 0.4`. Floor near −10…−20 dBFS → gain too high, `gain 16`.
 - **No window at all** — `export DISPLAY=:0`.
 - **SoapySDR device not found** — `SoapySDRUtil --find`; install `gr-soapy` + the `Soapy<Driver>` plugin if missing.
+- **BladeRF sees the device but finds no signal** — its FPGA must be loaded every power-on. libbladeRF autoloads `~/.config/Nuand/bladeRF/hostedxA4.rbf` (xA4) or `hostedxA9.rbf` (xA9) — note the **exact** name (the nuand.com download is `hostedxA4-latest.rbf`; rename it). `./setup.sh` fetches/renames it; `./setup.sh --check` reports it. Use a **USB 3.0** port — USB 2.0 caps the BladeRF at ~5–8 Msps, below the 20 Msps sweep.
 - **ANTSDR not detected** — `ping 192.168.1.10 && uhd_find_devices`.
 - **Static / no signal** — TX powered? Antenna on the RX port? Frequency matches the channel? Try more gain.
 
