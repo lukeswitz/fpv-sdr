@@ -8,17 +8,20 @@ differences are detected at runtime. There are no OS-specific code paths; only t
 differs (your package manager) and that's spelled out below.
 
 ## Quick start
-Already have GNU Radio + `gr-ntsc-rc` (e.g. on DragonOS)? Otherwise see **Install**.
 ```bash
 git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
-cd dragon-fpv-decoder && chmod +x fpv_scanner.sh
-pip3 install -r requirements.txt        # numpy, Pillow
-./fpv_scanner.sh                        # ANTSDR / UHD (default)
-./fpv_scanner.sh --sdr hackrf           # or: --sdr bladerf
+cd dragon-fpv-decoder
+./setup.sh                 # macOS or Linux: installs the stack + builds the decoder
+./fpv_scanner.sh           # ANTSDR / UHD (default);  add --sdr hackrf | bladerf
 ```
-Then type `scan`. No video window opens until a real FPV signal is confirmed.
+Then type `scan` — no video window opens until a real FPV signal is confirmed.
+`./setup.sh --check` reports what's installed or missing and changes nothing.
 
 ## Install
+**`./setup.sh` does all of this automatically** — it detects macOS vs Linux, installs the
+stack, and builds gr-ntsc-rc. The manual steps below are for reference, non-apt Linux, or
+custom setups. (`./setup.sh --check` audits an existing install without changing anything.)
+
 Nothing here is OS-specific. Install GNU Radio and your SDR's driver with your package
 manager, add the Python deps, then build the NTSC decoder once — same steps and same
 runtime behavior on Linux and macOS.
@@ -138,6 +141,7 @@ signal can destroy the front-end LNA; use an external attenuator instead. Detect
 for the best image — the ANTSDR captures the full signal and decodes cleaner.
 
 ## Architecture
+- `setup.sh` — one-command installer (macOS/Linux); `--check` audits an existing install
 - `fpv_scanner.sh` — interactive orchestrator (channel tables, scan/view handoff, single-radio-owner management)
 - `fpv_env.sh` — resolves the Python with GNU Radio bindings and wires the numpy / `~/.local` paths (sourced by the scanner)
 - `fpv_detect.py` — headless FFT chunk-sweep detector (SNR + narrow-peak gate, plus FM constant-envelope confirm on SoapySDR / NTSC sync-lock on UHD); opens no window
