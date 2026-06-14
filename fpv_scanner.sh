@@ -443,7 +443,7 @@ main() {
     show_menu
     
     while true; do
-        echo -n "> "
+        echo -n "${CURRENT_CHANNEL:+[$CURRENT_CHANNEL ${CURRENT_FREQ}MHz] }> "
         read -r cmd arg1 arg2
         
         case "$cmd" in
