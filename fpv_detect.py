@@ -427,7 +427,7 @@ def main():
             "SNR+narrow-peak only (build gr-ntsc-rc to enable NTSC sync-lock)\n")
 
     want_lock = (not args.spectrum and not args.survey_only
-                 and args.confirm in ('auto', 'ntsc'))
+                 and args.confirm == 'ntsc')
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna,
                   lna=args.lna, vga=args.vga, amp=args.amp,
@@ -445,12 +445,7 @@ def main():
 
     confirm = args.confirm
     if confirm == 'auto':
-        if tb.have_lock:
-            confirm = 'cvlock'
-        elif not tb.is_uhd:
-            confirm = 'cv'
-        else:
-            confirm = 'snr'
+        confirm = 'cv'
 
     usable = args.samp_rate * args.usable_frac
     n_chunks = len(chunk_plan([f for _, f in chans], usable))
@@ -538,7 +533,6 @@ def main():
             hit_names = {r[0] for r in cands}
 
             hit = None
-            evals = []
             for cand in cands[:3]:
                 seed = cand[1]
                 if args.localize_dwell > 0:
@@ -555,11 +549,10 @@ def main():
                 time.sleep(args.settle)
                 cv = None
                 lk = None
-                if confirm in ('cv', 'cvlock'):
+                if confirm == 'cv':
                     cv = tb.envelope_cv(args.lock_dwell)
-                if confirm in ('ntsc', 'cvlock') and tb.have_lock:
-                    if confirm == 'ntsc':
-                        time.sleep(args.lock_dwell)
+                elif confirm == 'ntsc' and tb.have_lock:
+                    time.sleep(args.lock_dwell)
                     lk = tb.lock_metric()
                 cv_ok = cv is not None and cv <= args.env_cv
                 lk_ok = lk is not None and lk >= args.lock_thresh
@@ -567,8 +560,6 @@ def main():
                     ok = cv_ok
                 elif confirm == 'ntsc':
                     ok = lk_ok
-                elif confirm == 'cvlock':
-                    ok = cv_ok or lk_ok
                 else:
                     ok = True
                 parts = []
@@ -585,26 +576,12 @@ def main():
                     % (cand[0], center / 1e6, name, freq / 1e6,
                        (center - freq) / 1e6, cand[3], mlabel,
                        "ACCEPT" if ok else "REJECT"))
-                if ok and confirm != 'cvlock':
+                if ok:
                     print("HIT %s %.0f %.1f" % (name, freq, cand[3]),
                           flush=True)
                     rc = 0
                     hit = (name, freq)
                     break
-                if ok and confirm == 'cvlock':
-                    evals.append((name, freq, cand[3], cv_ok, lk_ok))
-
-            if hit is None and confirm == 'cvlock' and evals:
-                locked = next((e for e in evals if e[4]), None)
-                chosen = locked if locked else evals[0]
-                sys.stderr.write(
-                    "[detect] selected %s (%s; %d candidate(s) passed)\n"
-                    % (chosen[0], "NTSC-locked" if chosen[4] else "FM-confirmed",
-                       len(evals)))
-                print("HIT %s %.0f %.1f" % (chosen[0], chosen[1], chosen[2]),
-                      flush=True)
-                rc = 0
-                hit = (chosen[0], chosen[1])
 
             if hit is None:
                 if cands:

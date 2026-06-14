@@ -13,11 +13,15 @@ LNA="${FPV_LNA:-}"
 VGA="${FPV_VGA:-}"
 AMP="${FPV_AMP:-}"
 SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
-DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-20e6}"
+DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-}"
+DSR_SET=""; [[ -n "$FPV_DETECT_SAMP_RATE" ]] && DSR_SET=1
 ROTATE="${FPV_ROTATE:-0}"
 CONTRAST="${FPV_CONTRAST:-0.8}"
 MARGIN="${FPV_MARGIN:-12}"
-SETTLE="${FPV_SETTLE:-0.2}"
+SETTLE="${FPV_SETTLE:-}"
+SETTLE_SET=""; [[ -n "$FPV_SETTLE" ]] && SETTLE_SET=1
+DWELL="${FPV_DWELL:-}"
+DWELL_SET=""; [[ -n "$FPV_DWELL" ]] && DWELL_SET=1
 CONFIRM="${FPV_CONFIRM:-}"
 DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
@@ -83,6 +87,27 @@ resolve_gain() {
         case "$SDR" in
             hackrf) GAIN=24 ;;
             *) GAIN=40 ;;
+        esac
+    fi
+}
+
+resolve_speed() {
+    if [[ -z "$DSR_SET" ]]; then
+        case "$SDR" in
+            hackrf) DETECT_SAMP_RATE=20e6 ;;
+            *)      DETECT_SAMP_RATE=40e6 ;;
+        esac
+    fi
+    if [[ -z "$SETTLE_SET" ]]; then
+        case "$SDR" in
+            hackrf) SETTLE=0.1 ;;
+            *)      SETTLE=0.08 ;;
+        esac
+    fi
+    if [[ -z "$DWELL_SET" ]]; then
+        case "$SDR" in
+            hackrf) DWELL=0.08 ;;
+            *)      DWELL=0.06 ;;
         esac
     fi
 }
@@ -167,7 +192,7 @@ scan_channels() {
         "$PYTHON" "$DETECT_PY" \
             --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
             ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
-            --settle "$SETTLE" --margin "$MARGIN" \
+            --settle "$SETTLE" --margin "$MARGIN" ${DWELL:+--chunk-dwell "$DWELL"} \
             ${CONFIRM:+--confirm "$CONFIRM"} \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
@@ -246,7 +271,7 @@ scan_loop() {
             "$PYTHON" "$DETECT_PY" \
                 --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
                 ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
-                --settle "$SETTLE" --margin "$MARGIN" \
+                --settle "$SETTLE" --margin "$MARGIN" ${DWELL:+--chunk-dwell "$DWELL"} \
                 ${CONFIRM:+--confirm "$CONFIRM"} \
                 ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
                 ${ANTENNA:+--antenna "$ANTENNA"} \
@@ -297,7 +322,7 @@ sweep_channels() {
     "$PYTHON" "$DETECT_PY" \
         --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
         ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
-        --settle "$SETTLE" --margin "$MARGIN" --survey-only \
+        --settle "$SETTLE" --margin "$MARGIN" ${DWELL:+--chunk-dwell "$DWELL"} --survey-only \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         "${tokens[@]}" 2>"$errf" \
@@ -408,6 +433,7 @@ main() {
     fi
 
     resolve_gain
+    resolve_speed
     echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN, samp_rate: $SAMP_RATE)"
     echo "[INFO] Python: $PYTHON"
     echo "[INFO] Log file: $SCAN_LOG"
@@ -452,7 +478,8 @@ main() {
                     release_sdr
                     SDR="$arg1"
                     if [[ -z "$GAIN_SET" ]]; then GAIN=""; resolve_gain; fi
-                    echo "[INFO] SDR set to $SDR (gain $GAIN dB)"
+                    resolve_speed
+                    echo "[INFO] SDR set to $SDR (gain $GAIN dB, ${DETECT_SAMP_RATE} detect)"
                 else
                     echo "[INFO] Current SDR: $SDR"
                 fi
