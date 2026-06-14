@@ -202,7 +202,7 @@ scan_channels() {
     pkill -9 -f "fpv_detect.py" >/dev/null 2>&1
     DETECT_PID=""
 
-    grep -E "candidate |selected " "$errf" 2>/dev/null | sed 's/^\[detect\] /  /'
+    grep -E "candidate |selected " "$errf" 2>/dev/null | sed 's/.*\[detect\] /  /'
 
     if [[ $SCAN_ACTIVE -eq 0 ]]; then
         echo "[INFO] Scan stopped"
