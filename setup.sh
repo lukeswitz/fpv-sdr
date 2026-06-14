@@ -24,6 +24,15 @@ warn() { printf '  \033[33m[--]\033[0m %s\n' "$*"; }
 err()  { printf '  \033[31m[XX]\033[0m %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 need() { "$@" || { err "command failed: $*"; exit 1; }; }
+run_quiet() {
+    local log="$1"; shift
+    if ! "$@" >>"$log" 2>&1; then
+        err "command failed: $*"
+        echo "    --- last 25 lines of $log ---"
+        tail -25 "$log"
+        exit 1
+    fi
+}
 
 resolve_py() {
     PYTHON=""
@@ -86,17 +95,19 @@ build_soapy_module() {
         return
     fi
     brewpfx="$(brew --prefix)"
-    say "Building $name from source (C++ only — pulls no python)"
+    local log="${TMPDIR:-/tmp}/dragon-${name}-build.log"
+    : > "$log"
+    say "Building $name from source (C++ only — pulls no python; log: $log)"
     local src="${HOME}/.cache/dragon-fpv/$name"
     mkdir -p "$(dirname "$src")"
-    [[ -d "$src/.git" ]] || need git clone --depth 1 "$repo" "$src"
+    [[ -d "$src/.git" ]] || run_quiet "$log" git clone --depth 1 "$repo" "$src"
     cd "$src" || { err "cannot enter $src"; exit 1; }
-    need cmake -B build \
+    run_quiet "$log" cmake -B build \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_PREFIX_PATH="$brewpfx" \
         -DCMAKE_INSTALL_PREFIX="$brewpfx"
-    need cmake --build build -j"$(sysctl -n hw.ncpu)"
-    need cmake --install build
+    run_quiet "$log" cmake --build build -j"$(sysctl -n hw.ncpu)"
+    run_quiet "$log" cmake --install build
     cd "$PROJECT_DIR" || exit 1
     ok "$name built + installed (final --check below lists the $factory driver)"
 }
@@ -141,7 +152,9 @@ build_ntsc() {
         ok "gr-ntsc-rc already installed — skipping build"
         return
     fi
-    say "Building gr-ntsc-rc (PR6) with the converter-bounds patch"
+    local log="${TMPDIR:-/tmp}/dragon-gr-ntsc-rc-build.log"
+    : > "$log"
+    say "Building gr-ntsc-rc (PR6) with the converter-bounds patch (log: $log)"
     if [[ -d "$NTSC_SRC/.git" ]]; then
         ok "reusing $NTSC_SRC"
     else
@@ -160,18 +173,18 @@ build_ntsc() {
         local brewpfx pyver
         brewpfx="$(brew --prefix)"
         pyver="$("$PYTHON" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
-        need cmake -B build \
+        run_quiet "$log" cmake -B build \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_PREFIX_PATH="$brewpfx" \
             -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
             -DPYTHON_EXECUTABLE="$PYTHON" \
             -DGR_PYTHON_DIR="$HOME/.local/lib/$pyver/site-packages"
-        need cmake --build build -j"$(sysctl -n hw.ncpu)"
-        need cmake --install build
+        run_quiet "$log" cmake --build build -j"$(sysctl -n hw.ncpu)"
+        run_quiet "$log" cmake --install build
     else
-        need cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-        need cmake --build build -j"$(nproc)"
-        need sudo cmake --install build
+        run_quiet "$log" cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run_quiet "$log" cmake --build build -j"$(nproc)"
+        run_quiet "$log" sudo cmake --install build
         sudo ldconfig || true
     fi
     cd "$PROJECT_DIR" || exit 1
