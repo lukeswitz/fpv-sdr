@@ -122,25 +122,19 @@ build_soapy_modules_mac() {
 install_linux() {
     if ! have apt-get; then
         err "Non-apt Linux detected."
-        echo "  Install with your package manager: gnuradio (includes gr-soapy), uhd, ffmpeg,"
-        echo "  SoapyHackRF, SoapyBladeRF, numpy, Pillow, cmake, g++, git"
+        echo "  Install: gnuradio gnuradio-dev (gr-soapy ships inside gnuradio), soapysdr-tools,"
+        echo "  the SoapySDR device modules (hackrf/bladerf), uhd-host, ffmpeg, cmake, g++, git,"
+        echo "  python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev"
         echo "  then re-run:  ./setup.sh --check"
         exit 1
     fi
-    say "Installing core GNU Radio + build tools via apt (sudo)"
+    say "Installing GNU Radio + SDR stack via apt (sudo)"
     need sudo apt-get update
-    need sudo apt-get install -y gnuradio ffmpeg cmake g++ git pkg-config
-    say "Installing SDR drivers + Python libs (best-effort — a missing one is skipped, not fatal)"
-    local opt
-    for opt in uhd-host soapysdr-module-hackrf soapysdr-module-bladerf gr-soapy \
-               python3-numpy python3-pil \
-               gnuradio-dev python3-dev python3-pybind11 libboost-all-dev cmake; do
-        if sudo apt-get install -y "$opt" >/dev/null 2>&1; then
-            ok "$opt"
-        else
-            warn "$opt not in your apt repos — skipped (gnuradio bundles SoapySDR; pip covers numpy/Pillow)"
-        fi
-    done
+    need sudo apt-get install -y \
+        gnuradio gnuradio-dev soapysdr-tools \
+        soapysdr-module-hackrf soapysdr-module-bladerf \
+        uhd-host ffmpeg cmake g++ git pkg-config \
+        python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev
 }
 
 install_pydeps() {
