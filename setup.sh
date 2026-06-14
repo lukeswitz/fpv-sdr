@@ -64,9 +64,17 @@ doctor() {
 
 install_mac() {
     have brew || { err "Install Homebrew first: https://brew.sh"; exit 1; }
-    say "Installing GNU Radio + SDR stack via Homebrew"
-    export HOMEBREW_NO_AUTO_UPDATE=1
-    need brew install gnuradio soapysdr uhd ffmpeg bash cmake pybind11 hackrf libbladerf
+    export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+    local pkgs=(gnuradio soapysdr uhd ffmpeg bash cmake pybind11 hackrf libbladerf) want=() p
+    for p in "${pkgs[@]}"; do
+        brew list "$p" >/dev/null 2>&1 || want+=("$p")
+    done
+    if [[ ${#want[@]} -gt 0 ]]; then
+        say "Installing missing Homebrew formulae: ${want[*]}"
+        need brew install "${want[@]}"
+    else
+        ok "all Homebrew deps already present — not reinstalling (leaves your Python untouched)"
+    fi
     warn "SoapyHackRF/SoapyBladeRF are built from source below — the Homebrew tap formulae"
     warn "pull an extra python and fail on modern CMake, so they are deliberately avoided."
 }
