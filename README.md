@@ -77,8 +77,8 @@ winget install dorssel.usbipd-win
 usbipd list
 usbipd attach --wsl --busid <BUSID>
 ```
-Verified: install + smoke test pass on WSL (including WSL1 on an M1 Mac). On-air reception with a
-real radio on Windows is untested.
+Verified: `setup.cmd` (install + smoke test) and `run.cmd` (launch) both work on WSL — including
+WSL1 on an M1 Mac. On-air reception with a real radio on Windows is untested.
 
 ## Run
 ```bash
