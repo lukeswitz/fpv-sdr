@@ -5,7 +5,7 @@ Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC li
 All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
 ## What you need
-Any supported [radio](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR.
+Any supported [radio](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR, USRP ...
 
 
 ## Install
@@ -63,21 +63,18 @@ channel, otherwise it prints `No FPV signals`. Use `spectrum` for a live FFT vie
 Type `list` to see them all.
 
 ## Supported radios
-Decoding is all on your computer, so the SDR's FPGA size doesn't matter — any radio that reaches
-5.8 GHz and streams ~20 MHz works.
 
 | SDR | `--sdr` | Notes |
 |-----|---------|-------|
 | ANTSDR E200 | `uhd` | recommended |
 | USRP B210 / B200mini | `uhd` | |
 | BladeRF 2.0 micro | `bladerf` | needs its FPGA image (setup loads it) |
-| HackRF One | `hackrf` | 20 MHz / 8-bit — fine for FM video |
+| HackRF One | `hackrf` | 8-bit — _fine_ for FM video, slower fps than the rest|
 | ADALM-Pluto | `pluto` | SoapySDR (SoapyPlutoSDR); needs the 5.8 GHz firmware mod, and USB 2.0 caps sustained bandwidth |
 | LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
 
-**HackRF safety:** leave the amp **off** (the default). HackRF's max input is −5 dBm — the amp on a
-strong nearby transmitter can damage it; use an attenuator instead. `--gain` drives LNA + VGA
-(default 24).
+> [!IMPORTANT]
+> Ensure the gain settings are not too high for your device. Do not turn on the HackRF amp.
 
 ## Troubleshooting
 - **Nothing happens during a search** — normal; it stays in the terminal until a signal is found.
@@ -90,4 +87,4 @@ strong nearby transmitter can damage it; use an attenuator instead. `--gain` dri
 ## License
 For lawful reception of 5.8 GHz FPV video only — you are responsible for the rules in your
 jurisdiction. Provided **as is**, no warranty. The bundled NTSC decoder
-([gr-ntsc-rc](https://github.com/lscardoso/gr-ntsc-rc), in `vendor/`) is GPLv3; the rest is MIT.
+([gr-ntsc-rc](https://github.com/lscardoso/gr-ntsc-rc), in `vendor/`) is GPLv3; the rest is MIT. Author assumes no liability for anything this code does.
