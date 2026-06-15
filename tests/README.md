@@ -57,15 +57,15 @@ the run (an optional piece is missing, or a check couldn't run here yet — inst
 Same on every OS (inside WSL2 on Windows). Need an analog 5.8 GHz VTX on a known channel and the
 right antenna on the RX port.
 
-1. **No false window:** with no VTX powered, `scan` prints per-channel dBFS/SNR and `No FPV signals`
-   — no video window opens.
-2. **Finds the real channel:** power a VTX (e.g. A8 = 5725), `scan` → `[SIGNAL] A8 found …`, window
-   opens only on that channel. An off-nominal VTX still maps to the nearest channel, offset reported.
-3. **Rejects Wi-Fi:** busy 5 GHz Wi-Fi near the antenna, no VTX → `scan` rejects it (`No FPV signals`).
-4. **Survey table:** `sweep` prints per-channel RSSI/SNR (no gating, no video).
-5. **Spectrum:** `spectrum` or `spectrum A8` shows a hump at the VTX center.
-6. **Direct view:** `set A8` (or `freq 5725`) tunes and opens the viewer (an `ffplay` window on
-   macOS/brew).
+1. With **no VTX powered**, run `scan` → expect per-channel dBFS/SNR lines and `No FPV signals`,
+   and no window opens.
+2. Power a VTX on a known channel (e.g. A8 = 5725), run `scan` → expect `[SIGNAL] A8 found …` and
+   the viewer opens on that channel. An off-frequency VTX maps to the nearest channel, offset shown.
+3. With busy 5 GHz Wi-Fi near the antenna and no VTX, run `scan` → expect it rejects the Wi-Fi
+   (`No FPV signals`).
+4. Run `sweep` → expect a per-channel RSSI/SNR table, no video.
+5. Run `spectrum` (or `spectrum A8`) → expect a peak at the VTX center.
+6. Run `set A8` (or `freq 5725`) → expect the viewer to tune and open (an `ffplay` window on macOS/brew).
 
 Knobs if a live TX is missed or noise sneaks through: `margin <dB>`, `--env-cv <x>`, `gain <dB>`
 (lower if the floor sits near −10…−20 dBFS = clipping). See the main README **Troubleshooting**.
