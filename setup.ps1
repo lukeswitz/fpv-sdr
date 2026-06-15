@@ -29,15 +29,18 @@ if (-not (Test-WslReady)) {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$drive = $scriptDir.Substring(0, 1).ToLower()
-$wslSrc = '/mnt/' + $drive + (($scriptDir.Substring(2)) -replace '\\', '/')
+$tarPath = Join-Path $env:TEMP ("dragon-fpv-" + $PID + ".tar")
+Write-Host 'Packing the project...' -ForegroundColor Cyan
+& tar.exe -cf "$tarPath" -C "$scriptDir" .
+if ($LASTEXITCODE -ne 0) { Write-Host 'tar failed to pack the project folder.' -ForegroundColor Red; exit 1 }
+$wslTar = (& wsl.exe -d $Distro wslpath -a "$tarPath").Trim()
 
 $inner = @"
 set -e
-if ! command -v rsync >/dev/null || ! command -v git >/dev/null; then
-  sudo apt-get update -qq && sudo apt-get install -y -qq rsync git
-fi
-rsync -a --exclude=.git --exclude=__pycache__ "$wslSrc/" "`$HOME/dragon-fpv-decoder/"
+if ! command -v git >/dev/null; then sudo apt-get update -qq && sudo apt-get install -y -qq git; fi
+rm -rf "`$HOME/dragon-fpv-decoder"
+mkdir -p "`$HOME/dragon-fpv-decoder"
+tar -xf "$wslTar" -C "`$HOME/dragon-fpv-decoder"
 cd "`$HOME/dragon-fpv-decoder"
 ./setup.sh
 ./tests/smoke_test.sh
@@ -46,6 +49,7 @@ cd "`$HOME/dragon-fpv-decoder"
 Write-Host "Copying the project into $Distro and running ./setup.sh + smoke test..." -ForegroundColor Cyan
 & wsl.exe -d $Distro -- bash -lc $inner
 $code = $LASTEXITCODE
+Remove-Item "$tarPath" -ErrorAction SilentlyContinue
 if ($code -eq 0) {
     Write-Host ''
     Write-Host "Done. In the $Distro shell:  cd ~/dragon-fpv-decoder  then  ./fpv_scanner.sh --sdr hackrf" -ForegroundColor Green
