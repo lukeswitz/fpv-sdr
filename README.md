@@ -1,6 +1,6 @@
 # Dragon FPV Decoder
 
-Receive and decode analog **5.8 GHz FPV video** (the FM/NTSC link in many drones and FPV cameras)
+Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC link in many drones and FPV cameras; PAL is not supported)
 with a software-defined radio. All decoding runs on your computer in GNU Radio — the SDR just tunes
 and streams. Runs on Linux, macOS, and Windows.
 
@@ -74,7 +74,7 @@ Decoding is all on your computer, so the SDR's FPGA size doesn't matter — any 
 | USRP B210 / B200mini | `uhd` | |
 | BladeRF 2.0 micro | `bladerf` | needs its FPGA image (setup loads it) |
 | HackRF One | `hackrf` | 20 MHz / 8-bit — fine for FM video |
-| ADALM-Pluto | `uhd` | only with modified firmware for 5.8 GHz |
+| ADALM-Pluto | `pluto` | SoapySDR (SoapyPlutoSDR); needs the 5.8 GHz firmware mod, and USB 2.0 caps sustained bandwidth |
 | LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
 
 **HackRF safety:** leave the amp **off** (the default). HackRF's max input is −5 dBm — the amp on a

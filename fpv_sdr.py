@@ -5,7 +5,9 @@
 import sys
 import math
 
-UHD_ALIASES = ('uhd', 'antsdr', 'usrp', 'b200', 'b210', 'b200mini', 'pluto')
+UHD_ALIASES = ('uhd', 'antsdr', 'usrp', 'b200', 'b210', 'b200mini')
+
+SOAPY_DRIVERS = {'pluto': 'plutosdr'}
 
 
 def _build_uhd(samp_rate, center_freq, gain, dev_args, antenna):
@@ -70,7 +72,8 @@ def build_source(samp_rate, center_freq, gain, sdr='uhd', dev_args='', antenna=N
     try:
         if sdr in UHD_ALIASES:
             return _build_uhd(samp_rate, center_freq, gain, dev_args, antenna)
-        return _build_soapy(sdr, samp_rate, center_freq, gain, dev_args, antenna, lna, vga, amp)
+        driver = SOAPY_DRIVERS.get(sdr, sdr)
+        return _build_soapy(driver, samp_rate, center_freq, gain, dev_args, antenna, lna, vga, amp)
     except RuntimeError as e:
         raise SystemExit(
             "[fpv] no '%s' device found: %s\n"
