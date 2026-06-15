@@ -1,0 +1,54 @@
+id: NTSC_decoder_c
+label: NTSC Decoder C++
+flags: [ python, cpp ]
+category: '[NTSC]'
+
+parameters:
+-   id: samp_rate
+    label: Samp_rate
+    dtype: float
+    default: samp_rate
+
+inputs:
+-   domain: stream
+    dtype: float
+
+outputs:
+-   domain: stream
+    dtype: float
+-   domain: stream
+    dtype: float
+-   domain: stream
+    dtype: float
+-   domain: stream
+    dtype: float
+
+templates:
+    imports: |-
+        import gnuradio.NTSC as NTSC
+    make: |-
+        NTSC.decoder_c(samp_rate)
+
+documentation: |-
+    ------------ NTSC DECODER C++ -----------
+    This block coverts a black and white NTSC Signal to video pixels sent to a block "NTSC Stream Converter C++".
+
+    --- INPUT ---
+    * in0 : NTSC black and white Signal filtered at 1.25 MHz.
+
+    --- OUTPUTS ---
+    * out0 : Control signal of NTSC states : synchronisation, equalising, ...
+        Note : NTSC_configuration.h lists all states.
+    * out1 : X = position of the pixel over the x-axis, from 0 to 360.
+    * out2 : Y = position of the pixel over the y-axis, from 0 to 240.
+    * out3 : BW = black and white level of the pixel : from black = 0 to white = 255.
+        Note : Inputs 1, 2, 3 are equal to -1 unless control signal out0 = video.
+
+    --- PARAMETERS ---
+    * Sample Rate : samp_rate.
+
+    --- CODE DESCRIPTION ---
+    The block decodes the NTSC Signal using a state machine.
+    States defined in NTSC_Protocol_And_Signal_Description.jpg
+
+file_format: 1

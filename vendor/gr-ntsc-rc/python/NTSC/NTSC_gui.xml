@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<block>
+<name>NTSC GUI</name>
+<key>NTSC_gui</key>
+<category>'[NTSC]'</category>
+<import>import gnuradio.NTSC as NTSC</import>
+<make>NTSC.gui($samp_rate)</make>
+<param>
+<name>Samp_rate</name>
+<key>samp_rate</key>
+<value>samp_rate</value>
+<type>float</type>
+</param>
+<sink>
+<name>in</name>
+<type>float</type>
+</sink>
+</block>

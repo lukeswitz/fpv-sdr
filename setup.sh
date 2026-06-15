@@ -5,7 +5,6 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 OS="$(uname -s)"
-NTSC_SRC="${FPV_NTSC_SRC:-$HOME/gr-ntsc-rc}"
 CHECK_ONLY=0
 case "${1:-}" in
     -c|--check) CHECK_ONLY=1 ;;
@@ -163,45 +162,36 @@ install_pydeps() {
 build_ntsc() {
     resolve_py
     if "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then
-        ok "gr-ntsc-rc already installed — skipping build"
+        ok "gr-ntsc-rc NTSC decoder already present — skipping build (DragonOS ships it prebuilt)"
         return
     fi
+    local src="$PROJECT_DIR/vendor/gr-ntsc-rc"
+    if [[ ! -f "$src/CMakeLists.txt" ]]; then
+        err "bundled gr-ntsc-rc missing at $src — re-clone the repo (it is committed, not a submodule)"
+        exit 1
+    fi
     local log="${TMPDIR:-/tmp}/dragon-gr-ntsc-rc-build.log"
+    local bld="${TMPDIR:-/tmp}/dragon-gr-ntsc-rc-build"
     : > "$log"
-    say "Building gr-ntsc-rc (PR6) with the converter-bounds patch (log: $log)"
-    if [[ -d "$NTSC_SRC/.git" ]]; then
-        ok "reusing $NTSC_SRC"
-    else
-        need git clone https://github.com/lscardoso/gr-ntsc-rc.git "$NTSC_SRC"
-    fi
-    cd "$NTSC_SRC" || { err "cannot enter $NTSC_SRC"; exit 1; }
-    git fetch origin pull/6/head:pr6 2>/dev/null || true
-    need git checkout pr6
-    if git apply --check "$PROJECT_DIR/patches/gr-ntsc-rc-converter-bounds.patch" 2>/dev/null; then
-        need git apply "$PROJECT_DIR/patches/gr-ntsc-rc-converter-bounds.patch"
-        ok "applied converter-bounds patch"
-    else
-        warn "converter-bounds patch already applied (or not applicable) — continuing"
-    fi
+    say "Building bundled gr-ntsc-rc (PR6 + converter-bounds fix, pinned in vendor/; log: $log)"
     if [[ "$OS" == Darwin ]]; then
         local brewpfx pyver
         brewpfx="$(brew --prefix)"
         pyver="$("$PYTHON" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
-        run_quiet "$log" cmake -B build \
+        run_quiet "$log" cmake -S "$src" -B "$bld" \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_PREFIX_PATH="$brewpfx" \
             -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
             -DPYTHON_EXECUTABLE="$PYTHON" \
             -DGR_PYTHON_DIR="$HOME/.local/lib/$pyver/site-packages"
-        run_quiet "$log" cmake --build build -j"$(sysctl -n hw.ncpu)"
-        run_quiet "$log" cmake --install build
+        run_quiet "$log" cmake --build "$bld" -j"$(sysctl -n hw.ncpu)"
+        run_quiet "$log" cmake --install "$bld"
     else
-        run_quiet "$log" cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-        run_quiet "$log" cmake --build build -j"$(nproc)"
-        run_quiet "$log" sudo cmake --install build
+        run_quiet "$log" cmake -S "$src" -B "$bld" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run_quiet "$log" cmake --build "$bld" -j"$(nproc)"
+        run_quiet "$log" sudo cmake --install "$bld"
         sudo ldconfig || true
     fi
-    cd "$PROJECT_DIR" || exit 1
 }
 
 bladerf_fpga() {

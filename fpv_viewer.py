@@ -128,10 +128,8 @@ def main():
     if not HAVE_NTSC:
         sys.stderr.write(
             "[viewer] gnuradio.NTSC not built — the viewer needs the gr-ntsc-rc decoder.\n"
-            "         Build it (see README 'Installation'):\n"
-            "           git clone https://github.com/lscardoso/gr-ntsc-rc.git && cd gr-ntsc-rc\n"
-            "           git fetch origin pull/6/head:pr6 && git checkout pr6\n"
-            "           mkdir build && cd build && cmake .. && make && sudo make install && sudo ldconfig\n")
+            "         Build the bundled copy:  ./setup.sh   (it builds vendor/gr-ntsc-rc)\n"
+            "         DragonOS ships it prebuilt; see the README 'Install' section.\n")
         sys.exit(2)
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
