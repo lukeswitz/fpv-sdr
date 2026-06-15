@@ -49,25 +49,25 @@ brew's GNU Radio has no `video_sdl`, so the viewer uses an `ffplay` window (same
 `fpv_env.sh` locates the GNU Radio Python automatically; set `FPV_PYTHON` to override.
 
 ### Windows (WSL2)
-No native Windows build — it runs inside WSL2 Ubuntu, and `setup.ps1` bootstraps that for you. In
-PowerShell, from the project folder:
+No native build — it runs inside WSL2 Ubuntu. From the project folder, run:
 ```powershell
-.\setup.ps1
+.\setup.cmd
 ```
-`setup.ps1` checks for WSL2 + Ubuntu and installs them if missing (run PowerShell **as
-Administrator** for that step; reboot once if Windows asks, then re-run), copies the project into
-Ubuntu, and runs `./setup.sh` + the smoke test. If PowerShell blocks the script, run
-`powershell -ExecutionPolicy Bypass -File .\setup.ps1`.
+(or just double-click `setup.cmd`). It installs WSL2 + Ubuntu if they're missing — run it **as
+Administrator** the first time, reboot if Windows asks, then run it again — and then installs and
+smoke-tests everything inside Ubuntu. `setup.cmd` only launches `setup.ps1` past the PowerShell
+execution policy; it changes no machine settings.
 
-For a USB radio (HackRF/BladeRF), attach it from an Administrator PowerShell first:
+For a USB radio (HackRF/BladeRF), attach it into WSL once per session from an **Administrator**
+PowerShell:
 ```powershell
 winget install dorssel.usbipd-win
 usbipd list
-usbipd bind   --busid <BUSID>
 usbipd attach --wsl --busid <BUSID>
 ```
-A networked ANTSDR needs no attach. The video window uses WSLg (Windows 11). **The Windows path is
-not yet tested on real hardware — `setup.ps1` has not been run on Windows.**
+A networked ANTSDR needs no attach. The video window uses WSLg (Windows 11). Verified on WSL2
+Ubuntu — install + smoke test pass; **on-air reception with a real radio is still untested on
+Windows.**
 
 ## Run
 ```bash

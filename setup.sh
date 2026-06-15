@@ -138,13 +138,15 @@ install_linux() {
         echo "  then re-run:  ./setup.sh --check"
         exit 1
     fi
-    say "Installing GNU Radio + SDR stack via apt (sudo)"
+    say "Installing GNU Radio + SDR stack via apt (sudo) — this can take a few minutes"
     need sudo apt-get update
-    need sudo apt-get install -y \
+    local log="${TMPDIR:-/tmp}/dragon-apt-install.log"; : > "$log"
+    run_quiet "$log" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         gnuradio gnuradio-dev soapysdr-tools \
         soapysdr-module-hackrf soapysdr-module-bladerf \
         uhd-host ffmpeg cmake g++ git pkg-config \
         python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev
+    ok "apt packages installed"
 }
 
 install_pydeps() {
@@ -241,10 +243,11 @@ bladerf_fpga
 chmod +x fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py
 
 if doctor; then
-    say "Setup complete. Run:"
+    say "Setup complete."
 else
-    say "Setup finished with warnings above. Run when ready:"
+    say "Setup finished with the warnings above."
 fi
-echo "  ./fpv_scanner.sh                 # ANTSDR / UHD (default)"
-echo "  ./fpv_scanner.sh --sdr hackrf    # HackRF  (or: --sdr bladerf)"
-echo "  then type 'scan'"
+echo ""
+echo "  Start it:   ./fpv_scanner.sh --sdr hackrf"
+echo "              ANTSDR / USRP: omit --sdr   |   BladeRF: --sdr bladerf"
+echo "  Then type:  scan"
