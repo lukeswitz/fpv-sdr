@@ -46,7 +46,7 @@ namespace gr {
        * class. NTSC::video_stream_converter_c::make is the public interface for
        * creating new instances.
        */
-      static sptr make(float samp_rate, float decimation_factor);
+      static sptr make(float samp_rate, float decimation_factor, int width = 360, int height = 240);
     };
 
   } // namespace NTSC

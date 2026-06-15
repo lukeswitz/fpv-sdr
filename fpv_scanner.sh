@@ -27,6 +27,7 @@ DEV_ARGS="${FPV_DEV_ARGS:-}"
 ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
 RECORD="${FPV_RECORD:-}"
+STANDARD="${FPV_STANDARD:-ntsc}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,8 +40,9 @@ while [[ $# -gt 0 ]]; do
         --margin) MARGIN="$2"; shift 2 ;;
         --dev-args) DEV_ARGS="$2"; shift 2 ;;
         --antenna) ANTENNA="$2"; shift 2 ;;
+        --standard) STANDARD="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--lna N] [--vga N] [--amp] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME]"
+            echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--lna N] [--vga N] [--amp] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME] [--standard ntsc|pal]"
             exit 0 ;;
         *) echo "[WARN] unknown arg: $1"; shift ;;
     esac
@@ -147,7 +149,7 @@ set_frequency() {
     DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
-        --rotate "$ROTATE" --contrast "$CONTRAST" \
+        --rotate "$ROTATE" --contrast "$CONTRAST" --standard "$STANDARD" \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         ${RECORD:+--record "$RECORD"} \
@@ -194,7 +196,7 @@ scan_channels() {
             --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
             ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
             --settle "$SETTLE" --margin "$MARGIN" ${DWELL:+--chunk-dwell "$DWELL"} \
-            ${CONFIRM:+--confirm "$CONFIRM"} \
+            ${CONFIRM:+--confirm "$CONFIRM"} --standard "$STANDARD" \
             ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
             ${ANTENNA:+--antenna "$ANTENNA"} \
             "${tokens[@]}" 2>"$errf"
@@ -273,7 +275,7 @@ scan_loop() {
                 --sdr "$SDR" --gain "$GAIN" --samp-rate "$DETECT_SAMP_RATE" \
                 ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
                 --settle "$SETTLE" --margin "$MARGIN" ${DWELL:+--chunk-dwell "$DWELL"} \
-                ${CONFIRM:+--confirm "$CONFIRM"} \
+                ${CONFIRM:+--confirm "$CONFIRM"} --standard "$STANDARD" \
                 ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
                 ${ANTENNA:+--antenna "$ANTENNA"} \
                 "${tokens[@]}" 2>/dev/null
@@ -384,7 +386,7 @@ show_menu() {
     echo -e "\n========================================="
     echo "FPV Channel Scanner & Monitor"
     echo "========================================="
-    echo "SDR: $SDR  |  Gain: $GAIN dB${LNA:+  LNA:$LNA}${VGA:+ VGA:$VGA}${AMP:+ AMP:on}  |  Current: ${CURRENT_CHANNEL:-none}${CURRENT_FREQ:+ (${CURRENT_FREQ} MHz)}"
+    echo "SDR: $SDR  |  Gain: $GAIN dB${LNA:+  LNA:$LNA}${VGA:+ VGA:$VGA}${AMP:+ AMP:on}  |  Std: ${STANDARD}  |  Current: ${CURRENT_CHANNEL:-none}${CURRENT_FREQ:+ (${CURRENT_FREQ} MHz)}"
     echo ""
     echo "Commands:"
     printf "  %-16s %s\n" \
@@ -405,6 +407,7 @@ show_menu() {
         "record <file>"   "record video; bare 'record' = off" \
         "rotate <deg>"    "0|90|180|270 (def ${ROTATE})" \
         "contrast <x>"    "demod contrast (def ${CONTRAST})" \
+        "standard <std>"  "video standard ntsc|pal (def ${STANDARD})" \
         "log"             "show scan log" \
         "quit"            "exit"
     echo "========================================="
@@ -551,6 +554,22 @@ main() {
                 else
                     echo "[ERROR] Invalid contrast: $arg1"
                 fi
+                ;;
+            standard|pal|ntsc)
+                local want="$cmd"
+                [[ "$cmd" == "standard" ]] && want="$arg1"
+                case "$want" in
+                    ntsc|pal)
+                        STANDARD="$want"
+                        if [[ "$STANDARD" == "pal" ]]; then
+                            echo "[INFO] Video standard set to pal (625/50, 360x288) — applies on next tune/scan"
+                        else
+                            echo "[INFO] Video standard set to ntsc (525/60, 360x240) — applies on next tune/scan"
+                        fi
+                        [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
+                        ;;
+                    *) echo "[INFO] Current standard: ${STANDARD} (use: standard ntsc|pal, or 'pal'/'ntsc')" ;;
+                esac
                 ;;
             log) [[ -f "$SCAN_LOG" ]] && tail -20 "$SCAN_LOG" || echo "[INFO] No log entries" ;;
             menu|help) show_menu ;;

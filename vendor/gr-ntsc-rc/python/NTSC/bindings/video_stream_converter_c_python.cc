@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(video_stream_converter_c.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(846bd866e16a9ec706901ba182f9d64a)                     */
+/* BINDTOOL_HEADER_FILE_HASH(e2c66fb7493d91b827b8c423de96d83e)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -39,6 +39,8 @@ void bind_video_stream_converter_c(py::module& m)
         .def(py::init(&video_stream_converter_c::make),
            py::arg("samp_rate"),
            py::arg("decimation_factor"),
+           py::arg("width") = 360,
+           py::arg("height") = 240,
            D(video_stream_converter_c,make)
         )
         

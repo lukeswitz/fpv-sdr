@@ -33,6 +33,8 @@
 #define NBR_VERTICAL_SYNC_LINES 21
 #define X_WIDTH 360
 #define Y_HEIGHT 240
+#define MAX_X_WIDTH 360
+#define MAX_Y_HEIGHT 288
 
 
 

@@ -44,32 +44,34 @@
 namespace gr {
   namespace NTSC {
     video_stream_converter_c::sptr
-    video_stream_converter_c::make(float samp_rate, float decimation_factor)
+    video_stream_converter_c::make(float samp_rate, float decimation_factor, int width, int height)
     {
       return gnuradio::get_initial_sptr
-        (new video_stream_converter_c_impl(samp_rate, decimation_factor));
+        (new video_stream_converter_c_impl(samp_rate, decimation_factor, width, height));
     }
 
 
 
     /*----------------------- CONSTRUCTOR -------------------*/
-    video_stream_converter_c_impl::video_stream_converter_c_impl(float samp_rate, float decimation_factor)
+    video_stream_converter_c_impl::video_stream_converter_c_impl(float samp_rate, float decimation_factor, int width, int height)
       : gr::sync_decimator("video_stream_converter_c",
               gr::io_signature::make(4, 4, sizeof(float)),
               gr::io_signature::make(1, 1, sizeof(short)), decimation_factor)
     {
       /*** INIT ***/
       d_decimation_factor = decimation_factor;
+      d_w = width;
+      d_h = height;
       d_x_in = 0;
       d_y_in = 0;
       d_bw_in = 0;
       d_x_out = 0;
       d_y_out = 0;
-			for(int i = 0; i < X_WIDTH; i++){
-				for(int j = 0; j < Y_HEIGHT; j++)
+			for(int i = 0; i < d_w; i++){
+				for(int j = 0; j < d_h; j++)
 					d_img_mat[j][i] = 127;
 			}
-      printf("Welcome in NTSC Video Stream Converter C++\n");
+      printf("Welcome in NTSC Video Stream Converter C++ (%dx%d)\n", d_w, d_h);
     }
 
 
@@ -108,7 +110,7 @@ namespace gr {
           if(d_bw_in < 5) d_bw_in = 5;
 
           // Inputs update image matrix
-          if(d_x_in < X_WIDTH - 2 && d_x_in > 2  && d_y_in < Y_HEIGHT - 2 && d_y_in > 2 ){
+          if(d_x_in < d_w - 2 && d_x_in > 2  && d_y_in < d_h - 2 && d_y_in > 2 ){
             d_img_mat[d_y_in][d_x_in] = d_bw_in;
           }
         }
@@ -121,16 +123,16 @@ namespace gr {
 
         // Update position
         d_x_out++;
-        if(d_x_out == X_WIDTH){
+        if(d_x_out == d_w){
           d_x_out = 0;
           d_y_out++;
         }
-        if(d_y_out == Y_HEIGHT){
+        if(d_y_out == d_h){
           d_y_out = 0;
         }
 
         // Output correct pixel b&w level
-        if(d_x_out < X_WIDTH && d_x_out > -1 && d_y_out < Y_HEIGHT && d_y_out > -1 )
+        if(d_x_out < d_w && d_x_out > -1 && d_y_out < d_h && d_y_out > -1 )
           out[i] = d_img_mat[d_y_out][d_x_out];
       }
 

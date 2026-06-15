@@ -8,6 +8,12 @@ parameters:
     label: Samp_rate
     dtype: float
     default: samp_rate
+-   id: standard
+    label: Standard
+    dtype: enum
+    options: ['0', '1']
+    option_labels: [NTSC, PAL]
+    default: '0'
 
 inputs:
 -   domain: stream
@@ -27,7 +33,7 @@ templates:
     imports: |-
         import gnuradio.NTSC as NTSC
     make: |-
-        NTSC.decoder_c(samp_rate)
+        NTSC.decoder_c(samp_rate, ${standard})
 
 documentation: |-
     ------------ NTSC DECODER C++ -----------

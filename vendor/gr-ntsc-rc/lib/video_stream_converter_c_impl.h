@@ -12,7 +12,9 @@ namespace gr {
     /*-------------------GLOBAL VARS DEFINITION ------------------*/
      private:
        float d_decimation_factor;
-       float d_img_mat[Y_HEIGHT + 20][X_WIDTH + 20];
+       float d_img_mat[MAX_Y_HEIGHT + 20][MAX_X_WIDTH + 20];
+       int d_w;
+       int d_h;
        int d_x_in;
        int d_x_out;
        int d_y_in;
@@ -22,7 +24,7 @@ namespace gr {
 
 
      public:
-      video_stream_converter_c_impl(float samp_rate, float decimation_factor);
+      video_stream_converter_c_impl(float samp_rate, float decimation_factor, int width, int height);
       ~video_stream_converter_c_impl();
       int work(int noutput_items,
          gr_vector_const_void_star &input_items,

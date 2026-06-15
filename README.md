@@ -1,6 +1,6 @@
 # Dragon FPV Decoder
 
-Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC link in many drones and FPV cameras; PAL is not supported) with a software-defined radio. 
+Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or PAL link in many drones and FPV cameras) with a software-defined radio. Default is NTSC; pass `--standard pal` (or type `pal` at the prompt) for the 625/50 cameras common in Europe. 
 
 All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
@@ -37,6 +37,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 ```bash
 ./fpv_scanner.sh                 # ANTSDR / USRP (default)
 ./fpv_scanner.sh --sdr hackrf    # or --sdr bladerf
+./fpv_scanner.sh --standard pal  # PAL camera (625/50); default is NTSC
 ```
 
 
@@ -51,6 +52,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
+| `standard <ntsc\|pal>` (or `pal` / `ntsc`) | switch video standard — `pal` = 625/50, 360×288 (EU cameras); default `ntsc` |
 | `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
 
 Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
