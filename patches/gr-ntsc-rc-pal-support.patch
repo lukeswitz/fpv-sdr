@@ -1,0 +1,372 @@
+diff --git a/grc/NTSC_decoder_c.block.yml b/grc/NTSC_decoder_c.block.yml
+index 72e02f2..44082dc 100755
+--- a/grc/NTSC_decoder_c.block.yml
++++ b/grc/NTSC_decoder_c.block.yml
+@@ -8,6 +8,12 @@ parameters:
+     label: Samp_rate
+     dtype: float
+     default: samp_rate
++-   id: standard
++    label: Standard
++    dtype: enum
++    options: ['0', '1']
++    option_labels: [NTSC, PAL]
++    default: '0'
+ 
+ inputs:
+ -   domain: stream
+@@ -27,7 +33,7 @@ templates:
+     imports: |-
+         import gnuradio.NTSC as NTSC
+     make: |-
+-        NTSC.decoder_c(samp_rate)
++        NTSC.decoder_c(samp_rate, ${standard})
+ 
+ documentation: |-
+     ------------ NTSC DECODER C++ -----------
+diff --git a/grc/NTSC_video_stream_converter_c.block.yml b/grc/NTSC_video_stream_converter_c.block.yml
+index 2631b81..737f8c6 100644
+--- a/grc/NTSC_video_stream_converter_c.block.yml
++++ b/grc/NTSC_video_stream_converter_c.block.yml
+@@ -13,6 +13,14 @@ parameters:
+     label: Decimation Factor
+     dtype: float
+     default: samp_rate / (360 * 240 * 60)
++-   id: width
++    label: Width
++    dtype: int
++    default: '360'
++-   id: height
++    label: Height
++    dtype: int
++    default: '240'
+ 
+ inputs:
+ -   domain: stream
+@@ -30,7 +38,7 @@ outputs:
+ 
+ templates:
+     imports: import gnuradio.NTSC as NTSC
+-    make: NTSC.video_stream_converter_c(${samp_rate}, ${decimation_factor})
++    make: NTSC.video_stream_converter_c(${samp_rate}, ${decimation_factor}, ${width}, ${height})
+ 
+ documentation: |-
+     ------------ NTSC VIDEO STREAM CONVERTER C++ -----------
+diff --git a/include/gnuradio/NTSC/decoder_c.h b/include/gnuradio/NTSC/decoder_c.h
+index 0d64f3a..deb94d6 100755
+--- a/include/gnuradio/NTSC/decoder_c.h
++++ b/include/gnuradio/NTSC/decoder_c.h
+@@ -46,7 +46,7 @@ namespace gr {
+        * class. NTSC::decoder_c::make is the public interface for
+        * creating new instances.
+        */
+-      static sptr make(float samp_rate);
++      static sptr make(float samp_rate, int standard = 0);
+     };
+ 
+   } // namespace NTSC
+diff --git a/include/gnuradio/NTSC/video_stream_converter_c.h b/include/gnuradio/NTSC/video_stream_converter_c.h
+index 522cfc0..177bcf7 100755
+--- a/include/gnuradio/NTSC/video_stream_converter_c.h
++++ b/include/gnuradio/NTSC/video_stream_converter_c.h
+@@ -46,7 +46,7 @@ namespace gr {
+        * class. NTSC::video_stream_converter_c::make is the public interface for
+        * creating new instances.
+        */
+-      static sptr make(float samp_rate, float decimation_factor);
++      static sptr make(float samp_rate, float decimation_factor, int width = 360, int height = 240);
+     };
+ 
+   } // namespace NTSC
+diff --git a/lib/NTSC_configuration.h b/lib/NTSC_configuration.h
+index 88cf4d0..24b15de 100755
+--- a/lib/NTSC_configuration.h
++++ b/lib/NTSC_configuration.h
+@@ -33,6 +33,8 @@
+ #define NBR_VERTICAL_SYNC_LINES 21
+ #define X_WIDTH 360
+ #define Y_HEIGHT 240
++#define MAX_X_WIDTH 360
++#define MAX_Y_HEIGHT 288
+ 
+ 
+ 
+diff --git a/lib/decoder_c_impl.cc b/lib/decoder_c_impl.cc
+index 7113ee5..a94774b 100755
+--- a/lib/decoder_c_impl.cc
++++ b/lib/decoder_c_impl.cc
+@@ -43,16 +43,16 @@
+ namespace gr {
+   namespace NTSC {
+     decoder_c::sptr
+-    decoder_c::make(float samp_rate)
++    decoder_c::make(float samp_rate, int standard)
+     {
+       return gnuradio::get_initial_sptr
+-        (new decoder_c_impl(samp_rate));
++        (new decoder_c_impl(samp_rate, standard));
+     }
+ 
+ 
+ 
+     /*------------------------- CONSTRUCTOR ---------------------*/
+-    decoder_c_impl::decoder_c_impl(float samp_rate)
++    decoder_c_impl::decoder_c_impl(float samp_rate, int standard)
+       : gr::sync_block("decoder_c",
+               gr::io_signature::make(1, 1, sizeof(float)),
+               gr::io_signature::make(4, 4, sizeof(float)))
+@@ -62,7 +62,14 @@ namespace gr {
+       d_state = IDLE;
+       d_samples_cnt = 0;
+       d_lines_cnt = 0;
+-      printf("Welcome in NTSC Decoder C++\n");
++      if(standard){
++        d_vs = { 64.0e-6, 4.7e-6, 5.7e-6, 51.95e-6, 1.65e-6, 288, 25, 360, 288 };
++      } else {
++        d_vs = { LINE_DURATION, HORIZONTAL_SYNC_DURATION, BACK_PORCH_DURATION,
++                 VIDEO_DURATION, FRONT_PORCH_DURATION, NBR_VIDEO_LINES,
++                 NBR_VERTICAL_SYNC_LINES, X_WIDTH, Y_HEIGHT };
++      }
++      printf("Welcome in NTSC Decoder C++ (standard=%s)\n", standard ? "PAL" : "NTSC");
+     }
+ 
+ 
+@@ -111,7 +118,7 @@ namespace gr {
+             out[i] =  HORIZONTAL_SYNC ;
+ 
+             // Time for Back Porch
+-            if(d_samples_cnt > HORIZONTAL_SYNC_DURATION * d_samp_rate){
++            if(d_samples_cnt > d_vs.hsync_dur * d_samp_rate){
+               d_state = BACK_PORCH;
+               d_samples_cnt = 0;
+             }
+@@ -123,7 +130,7 @@ namespace gr {
+             out[i] =  BACK_PORCH;
+ 
+             // Time for Video
+-            if(d_samples_cnt > BACK_PORCH_DURATION * d_samp_rate){
++            if(d_samples_cnt > d_vs.back_porch_dur * d_samp_rate){
+               d_state = VIDEO;
+               d_samples_cnt = 0;
+             }
+@@ -135,19 +142,19 @@ namespace gr {
+             out[i] = VIDEO;
+ 
+             // Set Pixel Output = (X, Y, BW)
+-            out1[i] = int(X_WIDTH * d_samples_cnt / (VIDEO_DURATION * d_samp_rate));
+-            out2[i] = int(Y_HEIGHT * d_lines_cnt / (1.0 * NBR_VIDEO_LINES));
++            out1[i] = int(d_vs.x_width * d_samples_cnt / (d_vs.video_dur * d_samp_rate));
++            out2[i] = int(d_vs.y_height * d_lines_cnt / (1.0 * d_vs.nbr_video_lines));
+             out3[i] = int((in[i] - BLACK_LEVEL) / (WHITE_LEVEL - BLACK_LEVEL) * 254);
+ 
+             // Time for Front Porch
+-            if(d_samples_cnt > VIDEO_DURATION * d_samp_rate){
++            if(d_samples_cnt > d_vs.video_dur * d_samp_rate){
+               d_state = FRONT_PORCH;
+               d_samples_cnt = 0;
+               d_lines_cnt++;
+             }
+ 
+             // Level and Time for Vertical Sync
+-            if(in[i-1] > HORIZONTAL_SYNC_THRESHOLD  && in[i] < HORIZONTAL_SYNC_THRESHOLD && d_samples_cnt < 0.75 * VIDEO_DURATION * d_samp_rate){
++            if(in[i-1] > HORIZONTAL_SYNC_THRESHOLD  && in[i] < HORIZONTAL_SYNC_THRESHOLD && d_samples_cnt < 0.75 * d_vs.video_dur * d_samp_rate){
+               d_state = VERTICAL_SYNC;
+               d_samples_cnt = 0;
+             }
+@@ -165,7 +172,7 @@ namespace gr {
+             }
+ 
+             // Time for horizontal sync
+-            if(d_samples_cnt > FRONT_PORCH_DURATION * d_samp_rate){
++            if(d_samples_cnt > d_vs.front_porch_dur * d_samp_rate){
+               d_state = HORIZONTAL_SYNC;
+               d_samples_cnt = 0;
+             }
+@@ -177,7 +184,7 @@ namespace gr {
+             out[i] =  VERTICAL_SYNC ;
+ 
+             // Ignore the Vertical Sync lines
+-            if(d_samples_cnt > (NBR_VERTICAL_SYNC_LINES + 1.5) * LINE_DURATION * d_samp_rate){
++            if(d_samples_cnt > (d_vs.nbr_vertical_sync_lines + 1.5) * d_vs.line_dur * d_samp_rate){
+               d_lines_cnt = 0;
+               d_state = IDLE;
+             }
+diff --git a/lib/decoder_c_impl.h b/lib/decoder_c_impl.h
+index 6ddb3a5..e1bf54f 100755
+--- a/lib/decoder_c_impl.h
++++ b/lib/decoder_c_impl.h
+@@ -3,6 +3,19 @@
+ #include <gnuradio/NTSC/decoder_c.h>
+ namespace gr {
+   namespace NTSC {
++
++    struct video_standard {
++      double line_dur;
++      double hsync_dur;
++      double back_porch_dur;
++      double video_dur;
++      double front_porch_dur;
++      int nbr_video_lines;
++      int nbr_vertical_sync_lines;
++      int x_width;
++      int y_height;
++    };
++
+     class decoder_c_impl : public decoder_c
+     {
+ 
+@@ -14,11 +27,12 @@ namespace gr {
+       float d_samples_cnt;
+       float d_lines_cnt;
+       int d_state;
++      video_standard d_vs;
+ 
+ 
+ 
+      public:
+-      decoder_c_impl(float samp_rate);
++      decoder_c_impl(float samp_rate, int standard);
+       ~decoder_c_impl();
+       int work(int noutput_items,
+          gr_vector_const_void_star &input_items,
+diff --git a/lib/video_stream_converter_c_impl.cc b/lib/video_stream_converter_c_impl.cc
+index ae3e974..50c3551 100755
+--- a/lib/video_stream_converter_c_impl.cc
++++ b/lib/video_stream_converter_c_impl.cc
+@@ -44,32 +44,34 @@
+ namespace gr {
+   namespace NTSC {
+     video_stream_converter_c::sptr
+-    video_stream_converter_c::make(float samp_rate, float decimation_factor)
++    video_stream_converter_c::make(float samp_rate, float decimation_factor, int width, int height)
+     {
+       return gnuradio::get_initial_sptr
+-        (new video_stream_converter_c_impl(samp_rate, decimation_factor));
++        (new video_stream_converter_c_impl(samp_rate, decimation_factor, width, height));
+     }
+ 
+ 
+ 
+     /*----------------------- CONSTRUCTOR -------------------*/
+-    video_stream_converter_c_impl::video_stream_converter_c_impl(float samp_rate, float decimation_factor)
++    video_stream_converter_c_impl::video_stream_converter_c_impl(float samp_rate, float decimation_factor, int width, int height)
+       : gr::sync_decimator("video_stream_converter_c",
+               gr::io_signature::make(4, 4, sizeof(float)),
+               gr::io_signature::make(1, 1, sizeof(short)), decimation_factor)
+     {
+       /*** INIT ***/
+       d_decimation_factor = decimation_factor;
++      d_w = width;
++      d_h = height;
+       d_x_in = 0;
+       d_y_in = 0;
+       d_bw_in = 0;
+       d_x_out = 0;
+       d_y_out = 0;
+-			for(int i = 0; i < X_WIDTH; i++){
+-				for(int j = 0; j < Y_HEIGHT; j++)
++			for(int i = 0; i < d_w; i++){
++				for(int j = 0; j < d_h; j++)
+ 					d_img_mat[j][i] = 127;
+ 			}
+-      printf("Welcome in NTSC Video Stream Converter C++\n");
++      printf("Welcome in NTSC Video Stream Converter C++ (%dx%d)\n", d_w, d_h);
+     }
+ 
+ 
+@@ -108,7 +110,7 @@ namespace gr {
+           if(d_bw_in < 5) d_bw_in = 5;
+ 
+           // Inputs update image matrix
+-          if(d_x_in < X_WIDTH - 2 && d_x_in > 2  && d_y_in < Y_HEIGHT - 2 && d_y_in > 2 ){
++          if(d_x_in < d_w - 2 && d_x_in > 2  && d_y_in < d_h - 2 && d_y_in > 2 ){
+             d_img_mat[d_y_in][d_x_in] = d_bw_in;
+           }
+         }
+@@ -121,16 +123,16 @@ namespace gr {
+ 
+         // Update position
+         d_x_out++;
+-        if(d_x_out == X_WIDTH){
++        if(d_x_out == d_w){
+           d_x_out = 0;
+           d_y_out++;
+         }
+-        if(d_y_out == Y_HEIGHT){
++        if(d_y_out == d_h){
+           d_y_out = 0;
+         }
+ 
+         // Output correct pixel b&w level
+-        if(d_x_out < X_WIDTH && d_x_out > -1 && d_y_out < Y_HEIGHT && d_y_out > -1 )
++        if(d_x_out < d_w && d_x_out > -1 && d_y_out < d_h && d_y_out > -1 )
+           out[i] = d_img_mat[d_y_out][d_x_out];
+       }
+ 
+diff --git a/lib/video_stream_converter_c_impl.h b/lib/video_stream_converter_c_impl.h
+index 9380f13..c2b5633 100755
+--- a/lib/video_stream_converter_c_impl.h
++++ b/lib/video_stream_converter_c_impl.h
+@@ -12,7 +12,9 @@ namespace gr {
+     /*-------------------GLOBAL VARS DEFINITION ------------------*/
+      private:
+        float d_decimation_factor;
+-       float d_img_mat[Y_HEIGHT + 20][X_WIDTH + 20];
++       float d_img_mat[MAX_Y_HEIGHT + 20][MAX_X_WIDTH + 20];
++       int d_w;
++       int d_h;
+        int d_x_in;
+        int d_x_out;
+        int d_y_in;
+@@ -22,7 +24,7 @@ namespace gr {
+ 
+ 
+      public:
+-      video_stream_converter_c_impl(float samp_rate, float decimation_factor);
++      video_stream_converter_c_impl(float samp_rate, float decimation_factor, int width, int height);
+       ~video_stream_converter_c_impl();
+       int work(int noutput_items,
+          gr_vector_const_void_star &input_items,
+diff --git a/python/NTSC/bindings/decoder_c_python.cc b/python/NTSC/bindings/decoder_c_python.cc
+index 4bc4fb1..9db037c 100644
+--- a/python/NTSC/bindings/decoder_c_python.cc
++++ b/python/NTSC/bindings/decoder_c_python.cc
+@@ -14,7 +14,7 @@
+ /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
+ /* BINDTOOL_USE_PYGCCXML(0)                                                        */
+ /* BINDTOOL_HEADER_FILE(decoder_c.h)                                        */
+-/* BINDTOOL_HEADER_FILE_HASH(29c7c213d86fbfc60349c8e795d67122)                     */
++/* BINDTOOL_HEADER_FILE_HASH(94e78583d72fe43dfdac1793e0b2cc31)                     */
+ /***********************************************************************************/
+ 
+ #include <pybind11/complex.h>
+@@ -38,6 +38,7 @@ void bind_decoder_c(py::module& m)
+ 
+         .def(py::init(&decoder_c::make),
+            py::arg("samp_rate"),
++           py::arg("standard") = 0,
+            D(decoder_c,make)
+         )
+         
+diff --git a/python/NTSC/bindings/video_stream_converter_c_python.cc b/python/NTSC/bindings/video_stream_converter_c_python.cc
+index 0e2fd67..bf10549 100644
+--- a/python/NTSC/bindings/video_stream_converter_c_python.cc
++++ b/python/NTSC/bindings/video_stream_converter_c_python.cc
+@@ -14,7 +14,7 @@
+ /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
+ /* BINDTOOL_USE_PYGCCXML(0)                                                        */
+ /* BINDTOOL_HEADER_FILE(video_stream_converter_c.h)                                        */
+-/* BINDTOOL_HEADER_FILE_HASH(846bd866e16a9ec706901ba182f9d64a)                     */
++/* BINDTOOL_HEADER_FILE_HASH(e2c66fb7493d91b827b8c423de96d83e)                     */
+ /***********************************************************************************/
+ 
+ #include <pybind11/complex.h>
+@@ -39,6 +39,8 @@ void bind_video_stream_converter_c(py::module& m)
+         .def(py::init(&video_stream_converter_c::make),
+            py::arg("samp_rate"),
+            py::arg("decimation_factor"),
++           py::arg("width") = 360,
++           py::arg("height") = 240,
+            D(video_stream_converter_c,make)
+         )
+         

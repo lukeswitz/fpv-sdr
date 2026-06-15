@@ -46,7 +46,7 @@ namespace gr {
        * class. NTSC::decoder_c::make is the public interface for
        * creating new instances.
        */
-      static sptr make(float samp_rate);
+      static sptr make(float samp_rate, int standard = 0);
     };
 
   } // namespace NTSC

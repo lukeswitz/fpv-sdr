@@ -14,7 +14,7 @@
 /* BINDTOOL_GEN_AUTOMATIC(0)                                                       */
 /* BINDTOOL_USE_PYGCCXML(0)                                                        */
 /* BINDTOOL_HEADER_FILE(decoder_c.h)                                        */
-/* BINDTOOL_HEADER_FILE_HASH(29c7c213d86fbfc60349c8e795d67122)                     */
+/* BINDTOOL_HEADER_FILE_HASH(94e78583d72fe43dfdac1793e0b2cc31)                     */
 /***********************************************************************************/
 
 #include <pybind11/complex.h>
@@ -38,6 +38,7 @@ void bind_decoder_c(py::module& m)
 
         .def(py::init(&decoder_c::make),
            py::arg("samp_rate"),
+           py::arg("standard") = 0,
            D(decoder_c,make)
         )
         

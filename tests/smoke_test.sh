@@ -33,6 +33,12 @@ else
     fail "converter-bounds fix NOT in vendored source (patch not applied)"
 fi
 [[ -f patches/gr-ntsc-rc-converter-bounds.patch ]] && pass "standalone patch kept (patches/)" || warn "patches/ diff missing"
+if grep -Fq "decoder_c::make(float samp_rate, int standard)" "$V/lib/decoder_c_impl.cc" 2>/dev/null; then
+    pass "PAL/NTSC standard support baked into vendored decoder"
+else
+    fail "PAL support NOT in vendored decoder (pal-support patch not applied)"
+fi
+[[ -f patches/gr-ntsc-rc-pal-support.patch ]] && pass "PAL patch kept (patches/)" || warn "patches/ PAL diff missing"
 
 hdr "2. setup.sh has no moving build-time deps"
 if grep -Eq "pull/6|git apply|git clone[^\"]*lscardoso" setup.sh; then
@@ -75,6 +81,11 @@ if [[ -n "$CC_PY" ]]; then
         pass "py_compile all modules ($CC_PY)"
     else
         fail "py_compile failed"; sed 's/^/      /' /tmp/dragon-pycompile.log
+    fi
+    if "$CC_PY" tests/test_pal_decode.py >/tmp/dragon-pal.log 2>&1; then
+        pass "PAL/NTSC decode math ($(grep -c -- '-> PASS' /tmp/dragon-pal.log) gradient checks; $(grep -q 'real decoder' /tmp/dragon-pal.log && echo 'incl. live C++' || echo 'model only'))"
+    else
+        fail "PAL/NTSC decode math model failed"; sed 's/^/      /' /tmp/dragon-pal.log
     fi
 else
     skip "no python3 found — cannot py_compile"

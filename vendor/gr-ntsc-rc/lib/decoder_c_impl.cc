@@ -43,16 +43,16 @@
 namespace gr {
   namespace NTSC {
     decoder_c::sptr
-    decoder_c::make(float samp_rate)
+    decoder_c::make(float samp_rate, int standard)
     {
       return gnuradio::get_initial_sptr
-        (new decoder_c_impl(samp_rate));
+        (new decoder_c_impl(samp_rate, standard));
     }
 
 
 
     /*------------------------- CONSTRUCTOR ---------------------*/
-    decoder_c_impl::decoder_c_impl(float samp_rate)
+    decoder_c_impl::decoder_c_impl(float samp_rate, int standard)
       : gr::sync_block("decoder_c",
               gr::io_signature::make(1, 1, sizeof(float)),
               gr::io_signature::make(4, 4, sizeof(float)))
@@ -62,7 +62,14 @@ namespace gr {
       d_state = IDLE;
       d_samples_cnt = 0;
       d_lines_cnt = 0;
-      printf("Welcome in NTSC Decoder C++\n");
+      if(standard){
+        d_vs = { 64.0e-6, 4.7e-6, 5.7e-6, 51.95e-6, 1.65e-6, 288, 25, 360, 288 };
+      } else {
+        d_vs = { LINE_DURATION, HORIZONTAL_SYNC_DURATION, BACK_PORCH_DURATION,
+                 VIDEO_DURATION, FRONT_PORCH_DURATION, NBR_VIDEO_LINES,
+                 NBR_VERTICAL_SYNC_LINES, X_WIDTH, Y_HEIGHT };
+      }
+      printf("Welcome in NTSC Decoder C++ (standard=%s)\n", standard ? "PAL" : "NTSC");
     }
 
 
@@ -111,7 +118,7 @@ namespace gr {
             out[i] =  HORIZONTAL_SYNC ;
 
             // Time for Back Porch
-            if(d_samples_cnt > HORIZONTAL_SYNC_DURATION * d_samp_rate){
+            if(d_samples_cnt > d_vs.hsync_dur * d_samp_rate){
               d_state = BACK_PORCH;
               d_samples_cnt = 0;
             }
@@ -123,7 +130,7 @@ namespace gr {
             out[i] =  BACK_PORCH;
 
             // Time for Video
-            if(d_samples_cnt > BACK_PORCH_DURATION * d_samp_rate){
+            if(d_samples_cnt > d_vs.back_porch_dur * d_samp_rate){
               d_state = VIDEO;
               d_samples_cnt = 0;
             }
@@ -135,19 +142,19 @@ namespace gr {
             out[i] = VIDEO;
 
             // Set Pixel Output = (X, Y, BW)
-            out1[i] = int(X_WIDTH * d_samples_cnt / (VIDEO_DURATION * d_samp_rate));
-            out2[i] = int(Y_HEIGHT * d_lines_cnt / (1.0 * NBR_VIDEO_LINES));
+            out1[i] = int(d_vs.x_width * d_samples_cnt / (d_vs.video_dur * d_samp_rate));
+            out2[i] = int(d_vs.y_height * d_lines_cnt / (1.0 * d_vs.nbr_video_lines));
             out3[i] = int((in[i] - BLACK_LEVEL) / (WHITE_LEVEL - BLACK_LEVEL) * 254);
 
             // Time for Front Porch
-            if(d_samples_cnt > VIDEO_DURATION * d_samp_rate){
+            if(d_samples_cnt > d_vs.video_dur * d_samp_rate){
               d_state = FRONT_PORCH;
               d_samples_cnt = 0;
               d_lines_cnt++;
             }
 
             // Level and Time for Vertical Sync
-            if(in[i-1] > HORIZONTAL_SYNC_THRESHOLD  && in[i] < HORIZONTAL_SYNC_THRESHOLD && d_samples_cnt < 0.75 * VIDEO_DURATION * d_samp_rate){
+            if(in[i-1] > HORIZONTAL_SYNC_THRESHOLD  && in[i] < HORIZONTAL_SYNC_THRESHOLD && d_samples_cnt < 0.75 * d_vs.video_dur * d_samp_rate){
               d_state = VERTICAL_SYNC;
               d_samples_cnt = 0;
             }
@@ -165,7 +172,7 @@ namespace gr {
             }
 
             // Time for horizontal sync
-            if(d_samples_cnt > FRONT_PORCH_DURATION * d_samp_rate){
+            if(d_samples_cnt > d_vs.front_porch_dur * d_samp_rate){
               d_state = HORIZONTAL_SYNC;
               d_samples_cnt = 0;
             }
@@ -177,7 +184,7 @@ namespace gr {
             out[i] =  VERTICAL_SYNC ;
 
             // Ignore the Vertical Sync lines
-            if(d_samples_cnt > (NBR_VERTICAL_SYNC_LINES + 1.5) * LINE_DURATION * d_samp_rate){
+            if(d_samples_cnt > (d_vs.nbr_vertical_sync_lines + 1.5) * d_vs.line_dur * d_samp_rate){
               d_lines_cnt = 0;
               d_state = IDLE;
             }

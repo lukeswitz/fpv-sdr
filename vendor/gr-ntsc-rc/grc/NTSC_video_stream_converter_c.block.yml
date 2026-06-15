@@ -13,6 +13,14 @@ parameters:
     label: Decimation Factor
     dtype: float
     default: samp_rate / (360 * 240 * 60)
+-   id: width
+    label: Width
+    dtype: int
+    default: '360'
+-   id: height
+    label: Height
+    dtype: int
+    default: '240'
 
 inputs:
 -   domain: stream
@@ -30,7 +38,7 @@ outputs:
 
 templates:
     imports: import gnuradio.NTSC as NTSC
-    make: NTSC.video_stream_converter_c(${samp_rate}, ${decimation_factor})
+    make: NTSC.video_stream_converter_c(${samp_rate}, ${decimation_factor}, ${width}, ${height})
 
 documentation: |-
     ------------ NTSC VIDEO STREAM CONVERTER C++ -----------

@@ -35,10 +35,15 @@ from fpv_display import frame_sink
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
-                 rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False):
+                 rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False,
+                 standard='ntsc'):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
+
+        is_pal = str(standard).lower() == 'pal'
+        self.vid_w, self.vid_h, field_rate, std_code = (
+            (360, 288, 50, 1) if is_pal else (360, 240, 60, 0))
 
         oversample = max(1, int(oversample))
         self.cap_rate = cap_rate = samp_rate * oversample
@@ -52,7 +57,7 @@ class viewer(gr.top_block):
             firdes.low_pass(1, cap_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
         self.analog_quadrature_demod_cf_0 = analog.quadrature_demod_cf(
             quad_demod_gain(cap_rate) * contrast)
-        self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate)
+        self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate, std_code)
 
         if sdr.lower() in UHD_ALIASES or not dcblock:
             self.connect((self.src, 0), (self.analog_quadrature_demod_cf_0, 0))
@@ -64,7 +69,8 @@ class viewer(gr.top_block):
         self.connect((self.low_pass_filter_1, 0), (self.NTSC_decoder_c_0, 0))
 
         self.NTSC_video_stream_converter_c_0 = NTSC.video_stream_converter_c(
-            samp_rate, samp_rate / (360 * 240 * 60))
+            samp_rate, samp_rate / (self.vid_w * self.vid_h * field_rate),
+            self.vid_w, self.vid_h)
         self.connect((self.NTSC_decoder_c_0, 0), (self.NTSC_video_stream_converter_c_0, 0))
         self.connect((self.NTSC_decoder_c_0, 1), (self.NTSC_video_stream_converter_c_0, 1))
         self.connect((self.NTSC_decoder_c_0, 2), (self.NTSC_video_stream_converter_c_0, 2))
@@ -73,14 +79,15 @@ class viewer(gr.top_block):
         self.recorder = None
         self.frame_sink_0 = None
         if HAVE_SDL:
-            self.video_sdl_sink_0 = video_sdl.sink_s(0, 360, 240, (360 * 2), (240 * 2))
+            self.video_sdl_sink_0 = video_sdl.sink_s(
+                0, self.vid_w, self.vid_h, (self.vid_w * 2), (self.vid_h * 2))
             self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.video_sdl_sink_0, 0))
             if record_path:
-                self.recorder = frame_sink(360, 240, None, record_path=record_path, rotate=rotate)
+                self.recorder = frame_sink(self.vid_w, self.vid_h, None, record_path=record_path, rotate=rotate)
                 self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.recorder, 0))
         else:
             self.frame_sink_0 = frame_sink(
-                360, 240, frame_out, record_path=record_path, live=live, title=title,
+                self.vid_w, self.vid_h, frame_out, record_path=record_path, live=live, title=title,
                 rotate=rotate)
             self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.frame_sink_0, 0))
 
@@ -123,6 +130,9 @@ def main():
                     help='capture at oversample*samp-rate then decimate (wide demod, correct decoder timing)')
     ap.add_argument('--contrast', type=float, default=1.0,
                     help='multiply the quad-demod gain to match the decoder sync/black/white levels')
+    ap.add_argument('--standard', choices=('ntsc', 'pal'), default='ntsc',
+                    help='analog video standard: ntsc (525/60, 360x240, default) or '
+                         'pal (625/50, 360x288 — common on EU FPV cameras)')
     args = ap.parse_args()
 
     if not HAVE_NTSC:
@@ -137,7 +147,8 @@ def main():
                 record_path=args.record, live=(not args.no_window),
                 dcblock=(not args.no_dcblock), rotate=args.rotate,
                 oversample=args.oversample, contrast=args.contrast,
-                lna=args.lna, vga=args.vga, amp=args.amp)
+                lna=args.lna, vga=args.vga, amp=args.amp,
+                standard=args.standard)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()

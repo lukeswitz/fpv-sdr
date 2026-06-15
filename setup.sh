@@ -53,7 +53,7 @@ doctor() {
     esac
     resolve_py
     if "$PYTHON" -c "import gnuradio.gr" 2>/dev/null; then ok "GNU Radio  ($PYTHON)"; else err "GNU Radio bindings not found"; missing=1; fi
-    if "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then ok "gr-ntsc-rc NTSC decoder"; else err "gr-ntsc-rc NTSC decoder missing"; missing=1; fi
+    if "$PYTHON" -c "import gnuradio.NTSC as N; N.decoder_c(20e6, 1)" 2>/dev/null; then ok "gr-ntsc-rc decoder (NTSC + PAL)"; elif "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then warn "gr-ntsc-rc present but NTSC-only — run ./setup.sh to rebuild with PAL"; else err "gr-ntsc-rc NTSC decoder missing"; missing=1; fi
     if "$PYTHON" -c "import numpy" 2>/dev/null; then ok "numpy"; else err "numpy missing"; missing=1; fi
     if "$PYTHON" -c "import PIL" 2>/dev/null; then ok "Pillow"; else err "Pillow missing"; missing=1; fi
     if have ffmpeg; then ok "ffmpeg"; else warn "ffmpeg missing (live window / recording)"; fi
@@ -163,9 +163,12 @@ install_pydeps() {
 
 build_ntsc() {
     resolve_py
-    if "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then
-        ok "gr-ntsc-rc NTSC decoder already present — skipping build (DragonOS ships it prebuilt)"
+    if "$PYTHON" -c "import gnuradio.NTSC as N; N.decoder_c(20e6, 1)" 2>/dev/null; then
+        ok "gr-ntsc-rc decoder present and PAL-capable — skipping build (DragonOS ships it prebuilt)"
         return
+    fi
+    if "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then
+        warn "gr-ntsc-rc present but NTSC-only (no PAL) — rebuilding from vendor/ for PAL support"
     fi
     local src="$PROJECT_DIR/vendor/gr-ntsc-rc"
     if [[ ! -f "$src/CMakeLists.txt" ]]; then

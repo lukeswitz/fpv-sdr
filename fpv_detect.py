@@ -90,7 +90,7 @@ def chunk_plan(freqs, usable):
 class detector(gr.top_block):
     def __init__(self, sdr, samp_rate, gain, start_freq, dev_args, antenna,
                  loc_nfft=4096, loc_margin=6.0, lna=None, vga=None, amp=False,
-                 want_lock=True):
+                 want_lock=True, standard='ntsc'):
         gr.top_block.__init__(self, "FPV Detector", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.is_hackrf = (str(sdr).lower() == 'hackrf')
@@ -137,7 +137,7 @@ class detector(gr.top_block):
             self.qdemod = analog.quadrature_demod_cf(quad_demod_gain(samp_rate))
             self.lpf = filter.fir_filter_fff(
                 1, firdes.low_pass(1, samp_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
-            self.dec = NTSC.decoder_c(samp_rate)
+            self.dec = NTSC.decoder_c(samp_rate, 1 if str(standard).lower() == 'pal' else 0)
             self.state_shift = blocks.add_const_ff(-1.0)
             self.state_abs = blocks.abs_ff(1)
             self.lock_avg = blocks.moving_average_ff(lock_win, 1.0 / lock_win, 4000, 1)
@@ -410,6 +410,9 @@ def main():
     ap.add_argument('--continuous', action='store_true')
     ap.add_argument('--stop-on-hit', action='store_true')
     ap.add_argument('--debug', action='store_true')
+    ap.add_argument('--standard', choices=('ntsc', 'pal'), default='ntsc',
+                    help='analog video standard for the NTSC-lock confirm path '
+                         '(ntsc default; pal = 625/50). Only affects --confirm ntsc.')
     ap.add_argument('channels', nargs='+')
     args = ap.parse_args()
 
@@ -435,7 +438,7 @@ def main():
     tb = detector(args.sdr, args.samp_rate, args.gain,
                   chans[0][1], args.dev_args, args.antenna,
                   lna=args.lna, vga=args.vga, amp=args.amp,
-                  want_lock=want_lock)
+                  want_lock=want_lock, standard=args.standard)
 
     def _clean_exit(sig=None, frame=None):
         tb.stop()
