@@ -25,16 +25,9 @@ install **and boots the app** (no radio needed):
   ```
   A networked ANTSDR needs no attach — check it with `ping 192.168.1.10 && uhd_find_devices`.
 
-There is **one** test command plus **one** optional flag:
-
-```bash
-./tests/smoke_test.sh               # the test: verify install + boot the scanner
-./tests/smoke_test.sh --build-ntsc  # also compile vendor/gr-ntsc-rc and import it (slower; run once after install)
-```
-
-Exit code is `0` when nothing FAILs, `1` otherwise. `WARN`/`SKIP` never fail the run (a `WARN`
-is an optional/missing piece; a `SKIP` means a check couldn't run here, e.g. no GNU Radio yet, so
-install and re-run).
+One command, no flags. Exit code is `0` when nothing FAILs, `1` otherwise. `WARN`/`SKIP` never
+fail the run (a `WARN` is an optional/missing piece; a `SKIP` means a check couldn't run here,
+e.g. no GNU Radio yet, so install and re-run).
 
 What it verifies:
 
@@ -47,7 +40,6 @@ What it verifies:
 | 5. Imports | `gnuradio.gr`, `numpy`, `PIL`, `gnuradio.NTSC`, `gnuradio.soapy` |
 | 6. SDR drivers | SoapySDR factories, UHD tools, `ffplay`; on WSL2, whether an SDR is in `lsusb` |
 | 7. App boots/runs | drives `fpv_scanner.sh` headless (`list` then `quit`): confirms it boots, resolves Python, and runs a command — **no radio needed** |
-| 8. `--build-ntsc` *(opt-in)* | configure + build + install the vendored tree, then import it from the fresh prefix |
 
 A clean run on a fully-installed host ends with `… pass / 0 fail / … skip`.
 

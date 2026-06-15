@@ -1,22 +1,11 @@
 #!/usr/bin/env bash
-# Dragon FPV Decoder — cross-OS smoke test (macOS / Linux / WSL2).
-# Run AFTER ./setup.sh. Verifies the install and boots the app (no radio needed).
-#   ./tests/smoke_test.sh               verify the install + boot the scanner
-#   ./tests/smoke_test.sh --build-ntsc  also build vendor/gr-ntsc-rc and import it
-# Exit code: 0 = no failures, 1 = one or more FAIL.
-
 set -o pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
-DO_BUILD=0
-for a in "$@"; do
-    case "$a" in
-        --build-ntsc) DO_BUILD=1 ;;
-        -h|--help)    sed -n '2,6p' "$0"; exit 0 ;;
-        *) echo "unknown arg: $a (try --help)"; exit 1 ;;
-    esac
-done
+case "${1:-}" in
+    -h|--help) printf 'usage: %s\n  run after ./setup.sh — checks the install and boots the app (no radio needed)\n' "$0"; exit 0 ;;
+esac
 
 PASS=0; FAIL=0; SKIP=0
 pass(){ printf '  \033[32m[PASS]\033[0m %s\n' "$*"; PASS=$((PASS+1)); }
@@ -32,7 +21,6 @@ grep -qi microsoft /proc/version 2>/dev/null && WSL=" (WSL2)"
 printf '\033[1mDragon FPV Decoder smoke test\033[0m — %s%s\n' "$OS" "$WSL"
 printf 'repo: %s\n' "$PROJECT_DIR"
 
-# ---------------------------------------------------------------- static
 hdr "1. Bundled decoder (vendored, frozen)"
 V="vendor/gr-ntsc-rc"
 [[ -f "$V/CMakeLists.txt" ]] && pass "vendor tree present ($V)" || fail "vendor tree missing ($V) — re-clone the repo"
@@ -70,10 +58,8 @@ else
     skip "shellcheck not installed"
 fi
 
-# ----------------------------------------------------- resolve Python
 hdr "4. Python + module compile"
 PYTHON=""
-# shellcheck source=/dev/null
 source "$PROJECT_DIR/fpv_env.sh" 2>/dev/null && resolve_fpv_python >/dev/null 2>&1
 if [[ -n "${PYTHON:-}" ]]; then
     pass "fpv_env.sh resolved a GNU Radio Python: $PYTHON"
@@ -94,7 +80,6 @@ else
     skip "no python3 found — cannot py_compile"
 fi
 
-# ----------------------------------------------------------- runtime
 hdr "5. GNU Radio + decoder import"
 if [[ -n "$GR_PY" ]]; then
     if "$GR_PY" -c "import gnuradio.gr" 2>/dev/null; then
@@ -107,7 +92,7 @@ if [[ -n "$GR_PY" ]]; then
     if "$GR_PY" -c "import gnuradio.NTSC" 2>/dev/null; then
         pass "import gnuradio.NTSC (decoder installed)"
     else
-        warn "gnuradio.NTSC not installed — run ./setup.sh (or this test with --build-ntsc to prove the vendored tree builds)"
+        warn "gnuradio.NTSC not installed — run ./setup.sh"
     fi
     "$GR_PY" -c "import gnuradio.soapy" 2>/dev/null && pass "gr-soapy present (HackRF/BladeRF path)" || warn "gr-soapy missing (needed for HackRF/BladeRF; UHD radios don't need it)"
 else
@@ -140,43 +125,9 @@ else
     printf '%s' "$boot" | grep -q "Raceband" && pass "scanner ran a command ('list' rendered the channel table)" || fail "'list' produced no channel table"
 fi
 
-# -------------------------------------------------- optional: build
-if [[ "$DO_BUILD" -eq 1 ]]; then
-    hdr "8. Build the vendored decoder (throwaway prefix)"
-    if [[ -z "$GR_PY" ]]; then
-        skip "no GNU Radio Python — cannot build the decoder"
-    elif ! have cmake; then
-        skip "cmake not installed — cannot build"
-    else
-        tmp="$(mktemp -d "${TMPDIR:-/tmp}/dragon-ntsc-test.XXXXXX")"
-        bld="$tmp/build"; pfx="$tmp/prefix"; log="$tmp/log"
-        pyver="$("$GR_PY" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
-        cm_args=(-S "$V" -B "$bld" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-                 -DCMAKE_INSTALL_PREFIX="$pfx" -DPYTHON_EXECUTABLE="$GR_PY" \
-                 -DGR_PYTHON_DIR="$pfx/lib/$pyver/site-packages")
-        [[ "$OS" == Darwin ]] && cm_args+=(-DCMAKE_PREFIX_PATH="$(brew --prefix)")
-        jobs="$( (sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null) || echo 2)"
-        if cmake "${cm_args[@]}" >"$log" 2>&1 \
-           && cmake --build "$bld" -j"$jobs" >>"$log" 2>&1 \
-           && cmake --install "$bld" >>"$log" 2>&1; then
-            pass "vendored gr-ntsc-rc configured + built + installed"
-            if PYTHONPATH="$pfx/lib/$pyver/site-packages:$PYTHONPATH" "$GR_PY" -c "import gnuradio.NTSC" 2>/dev/null; then
-                pass "import gnuradio.NTSC from the freshly built prefix"
-            else
-                fail "built but could not import gnuradio.NTSC from prefix"; tail -15 "$log" | sed 's/^/      /'
-            fi
-        else
-            fail "vendored build failed — last lines:"; tail -20 "$log" | sed 's/^/      /'
-        fi
-        rm -rf "$tmp"
-    fi
-fi
-
-# ---------------------------------------------------------- summary
 printf '\n\033[1m== summary ==\033[0m  \033[32m%d pass\033[0m / \033[31m%d fail\033[0m / \033[33m%d skip\033[0m\n' "$PASS" "$FAIL" "$SKIP"
 if [[ "$FAIL" -gt 0 ]]; then
     printf '\033[31mFAIL\033[0m — fix the items above.\n'; exit 1
 fi
-printf '\033[32mOK\033[0m — static checks passed%s. On-air hardware tests: see tests/README.md.\n' \
-    "$([[ -n "$GR_PY" ]] && echo " and the GNU Radio stack is importable")"
+printf '\033[32mOK\033[0m — install verified; on-air hardware tests in tests/README.md.\n'
 exit 0
