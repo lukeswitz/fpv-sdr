@@ -8,7 +8,6 @@ A video window opens only when a real FPV signal is found — not for every chan
 
 ## What you need
 - An SDR that reaches 5.8 GHz and streams ~20 MHz: ANTSDR / USRP (UHD), or HackRF / BladeRF (SoapySDR).
-- A 5.8 GHz antenna on the radio, and a powered FPV transmitter to receive.
 
 ## Install
 ```bash
@@ -43,7 +42,7 @@ has WSL2 and runs everything.
 ./fpv_scanner.sh --sdr hackrf    # or --sdr bladerf
 ```
 Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
-channel, otherwise it prints `No FPV signals`.
+channel, otherwise it prints `No FPV signals`. Use `spectrum` for FFT sweep visualiztion:
 
 <img width="934" height="392" alt="Dragon FPV Decoder scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
