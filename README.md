@@ -1,187 +1,95 @@
 # Dragon FPV Decoder
 
-Receive and decode analog **5.8 GHz FPV video** — the FM/NTSC video link used by many drones and
-FPV cameras — with a software-defined radio. The SDR only tunes and streams raw IQ; all
-demodulation and NTSC decoding runs on the host CPU in GNU Radio.
+Receive and decode analog **5.8 GHz FPV video** (the FM/NTSC link in many drones and FPV cameras)
+with a software-defined radio. All decoding runs on your computer in GNU Radio — the SDR just tunes
+and streams. Runs on Linux, macOS, and Windows.
 
-Runs on **Linux, macOS, and Windows (via WSL2)**. The interactive scanner sweeps the FPV channels
-headless and opens a video window only after it confirms a real FPV carrier — it does not open a
-window for every channel.
+A video window opens only when a real FPV signal is found — not for every channel.
 
-## Requirements
-- An SDR that tunes ~5.6–5.95 GHz and streams ≥20 MHz of bandwidth (see [Supported SDRs](#supported-sdrs)).
-- GNU Radio 3.10/3.11 and the bundled `gr-ntsc-rc` decoder (built by `setup.sh`).
-- A 5.8 GHz antenna on the RX port, and a powered FPV VTX to actually receive video.
+## What you need
+- An SDR that reaches 5.8 GHz and streams ~20 MHz: ANTSDR / USRP (UHD), or HackRF / BladeRF (SoapySDR).
+- A 5.8 GHz antenna on the radio, and a powered FPV transmitter to receive.
 
 ## Install
-`./setup.sh` detects your OS, installs the stack, and builds the bundled decoder.
-`./setup.sh --check` audits an existing install and changes nothing.
-
 ```bash
 git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
 cd dragon-fpv-decoder
 ./setup.sh
 ```
+`./setup.sh` installs everything for your OS and builds the decoder. `./setup.sh --check` only
+reports what's installed.
 
-### DragonOS
-GNU Radio and `gr-ntsc-rc` ship prebuilt. `setup.sh` detects the decoder and skips the build;
-`./setup.sh --check` confirms it. You can run the scanner straight away.
+- **DragonOS** — everything is prebuilt; `./setup.sh` just confirms it.
+- **Linux (Debian / Ubuntu)** — `./setup.sh` installs via apt. Fedora / Arch: it prints the packages to install, then re-run it.
+- **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
+- **Windows** — see below.
 
-### Linux (Debian / Ubuntu and derivatives)
-`setup.sh` installs via apt and builds the decoder. The apt line it runs:
-```bash
-sudo apt install gnuradio gnuradio-dev soapysdr-tools \
-  soapysdr-module-hackrf soapysdr-module-bladerf uhd-host \
-  ffmpeg cmake g++ git pkg-config python3-numpy python3-pil \
-  python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev
-```
-Non-apt distros (Fedora/Arch) aren't automated — `setup.sh` prints the packages to install, then
-you re-run it.
-
-### macOS (Homebrew)
-`setup.sh` installs the brew formulae, builds the SoapySDR HackRF/BladeRF modules from source, and
-builds the decoder into `~/.local`.
-> Don't `brew install soapyhackrf` / `soapybladerf` — those formulae pull a second Python that can
-> shadow GNU Radio's, and their CMake is too old to build. `setup.sh` builds them from C++ source
-> instead.
-
-brew's GNU Radio has no `video_sdl`, so the viewer uses an `ffplay` window (same decode).
-`fpv_env.sh` locates the GNU Radio Python automatically; set `FPV_PYTHON` to override.
-
-### Windows (via WSL)
-No native build — it runs inside WSL Ubuntu. Two commands, both from the project folder in
-PowerShell:
+### Windows
+The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 ```powershell
-.\setup.cmd                 # install: sets up WSL + Ubuntu, builds + smoke-tests inside it
-.\run.cmd --sdr hackrf      # run: launches the scanner inside WSL (omit --sdr for UHD/ANTSDR)
+.\setup.cmd                 # install (run as Administrator the first time; reboot if asked, then run again)
+.\run.cmd --sdr hackrf      # run  (leave off --sdr for ANTSDR / USRP)
 ```
-`setup.cmd` installs WSL + Ubuntu if missing (run **as Administrator** the first time; reboot if
-Windows asks, then run it again), then builds and smoke-tests everything inside Ubuntu — it only
-launches `setup.ps1` past the execution policy, no machine settings changed. `run.cmd` starts the
-scanner inside WSL so you don't have to open the Ubuntu shell yourself.
 
-**WSL1 vs WSL2 — what actually works.** WSL2 needs nested virtualization: on Apple Silicon that
-requires an **M3 or newer** Mac (macOS 15+); on **M1/M2 you get WSL1**; on a physical PC or Intel
-Mac you get WSL2.
-
-| Capability | WSL1 (M1/M2 Mac) | WSL2 (M3+ Mac, PC) |
-|---|:---:|:---:|
-| Install + `scan` / `sweep` / `spectrum` (terminal) | ✅ | ✅ |
-| Networked ANTSDR (Ethernet) | ✅ | ✅ |
-| USB radio (HackRF / BladeRF) | ❌ needs WSL2 | ✅ via `usbipd` |
-| Live video window | ❌ needs WSLg / X server | ✅ WSLg |
-
-For a USB radio on WSL2, attach it once per session from an **Administrator** PowerShell:
-```powershell
-winget install dorssel.usbipd-win
-usbipd list
-usbipd attach --wsl --busid <BUSID>
-```
-Verified: `setup.cmd` (install + smoke test) and `run.cmd` (launch) both work on WSL — including
-WSL1 on an M1 Mac. On-air reception with a real radio on Windows is untested.
+**Running Windows in a VM on a Mac (Parallels)?** WSL needs nested virtualization, which only
+**M3 or newer** Macs have. On an **M1 / M2 Mac you get WSL1**: the tool installs and the terminal
+parts (`scan`, `sweep`, `spectrum`) work with a **networked ANTSDR**, but **USB radios and the video
+window won't** — those need WSL2, i.e. a physical Windows PC or an M3+ Mac. A physical Windows PC
+has WSL2 and runs everything.
 
 ## Run
 ```bash
-./fpv_scanner.sh                 # ANTSDR / UHD (default)
-./fpv_scanner.sh --sdr hackrf    # or: --sdr bladerf
+./fpv_scanner.sh                 # ANTSDR / USRP (default)
+./fpv_scanner.sh --sdr hackrf    # or --sdr bladerf
 ```
-Type `scan`. The detector sweeps every channel headless; if it confirms an FPV signal it opens the
-viewer on that channel, otherwise it prints `No FPV signals`.
+Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
+channel, otherwise it prints `No FPV signals`.
 
 <img width="934" height="392" alt="Dragon FPV Decoder scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
-Commands at the prompt:
-
 | Command | Does |
 |---------|------|
-| `scan` | sweep once; open the viewer if a signal is confirmed |
-| `scan loop [SEC]` | keep sweeping until a signal; ENTER/Ctrl-C stops, `SEC` auto-stops |
-| `sweep` | RSSI/SNR table for all channels, no video |
-| `spectrum [live\|CH\|MHz] [SEC]` | terminal FFT (whole band, live, or one channel) |
+| `scan` | search once; open the video if a signal is found |
+| `scan loop [SEC]` | keep searching until a signal; ENTER / Ctrl-C stops, `SEC` auto-stops |
+| `sweep` | signal-strength table for all channels, no video |
+| `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
 | `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`) |
-| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF gain drives LNA+VGA) |
-| `margin <dB>` | SNR over the noise floor to count as a signal (default 12) |
-| `dwell <SEC>` | per-chunk sweep settle time |
-| `rotate <deg>` / `contrast <x>` / `record <file>` | display + capture |
-| `list` / `log` / `stop` / `quit` | channels / scan history / stop sweep / exit |
-
-Settings also accept flags / `FPV_*` env vars: `--sdr --gain --lna --vga --amp --samp-rate
---margin --dev-args --antenna`, and `FPV_CONFIRM=cv|ntsc|snr`.
+| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain |
+| `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
+| `rotate` / `contrast` / `record <file>` | adjust + capture video |
+| `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
 
 ## Channels
-64 channels across 8 bands — Raceband R1–R8, Band A, Band B, Band E, Fatshark F1–F8,
-ImmersionRC IMD1–6, DJI D1–D8, Low Band L1–L8 (5362–5945 MHz). Type `list` to print them.
+64 channels across 8 bands — Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
+Type `list` to see them all.
 
-## Supported SDRs
-Decoding is entirely host-side, so the SDR's FPGA size is irrelevant — any radio that reaches
-5.8 GHz and streams ~20 MHz of bandwidth works.
+## Supported radios
+Decoding is all on your computer, so the SDR's FPGA size doesn't matter — any radio that reaches
+5.8 GHz and streams ~20 MHz works.
 
-| SDR | Driver | `--sdr` | Status |
-|-----|--------|---------|--------|
-| ANTSDR E200 | UHD | `uhd` | Tested on-air |
-| HackRF One | SoapySDR | `hackrf` | Tested on-air (decoded video) |
-| BladeRF 2.0 micro | SoapySDR | `bladerf` | Tested on-air |
-| USRP B210 / B200mini | UHD | `uhd` | Untested — same UHD path as ANTSDR |
-| ADALM-Pluto | UHD/IIO | `uhd` | Untested — needs modified firmware to reach 5.8 GHz |
-| LimeSDR · RTL-SDR · Airspy · SDRplay | — | — | Won't work — can't tune 5.8 GHz |
+| SDR | `--sdr` | Notes |
+|-----|---------|-------|
+| ANTSDR E200 | `uhd` | recommended |
+| USRP B210 / B200mini | `uhd` | |
+| BladeRF 2.0 micro | `bladerf` | needs its FPGA image (setup loads it) |
+| HackRF One | `hackrf` | 20 MHz / 8-bit — fine for FM video |
+| ADALM-Pluto | `uhd` | only with modified firmware for 5.8 GHz |
+| LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
 
-The scanner sweeps at 20 MHz (HackRF) or 40 MHz (others) and decodes at 10 MHz — within every
-supported radio's limit. Override with `--samp-rate` / `FPV_DETECT_SAMP_RATE`.
-
-**HackRF gain & safety.** Three gain stages: AMP (0/+14 dB), LNA (0–40), VGA (0–62). `--gain`
-drives LNA+VGA; the default is 24 dB with **AMP off**. Leave AMP off — HackRF's max safe input is
-−5 dBm and the amp on a strong nearby VTX can damage the front end; use an attenuator instead.
-Default gains: HackRF 24, BladeRF 20, ANTSDR/UHD 30 (kept low to avoid clipping a close VTX).
-
-## How detection works
-For each channel the detector requires three things before calling it a signal:
-1. power ≥ `--margin` dB over the measured noise floor (default 12),
-2. a narrow peak above its neighbors (rejects broadband Wi-Fi, which can be louder than a real VTX),
-3. a constant-envelope check — analog FM video is near-constant amplitude; Wi-Fi and noise are not.
-
-It finds the carrier's true center by an FFT energy centroid and maps it to the nearest channel,
-so an off-frequency VTX is still identified (with the offset reported). Where the NTSC decoder is
-built, an NTSC sync-lock runs as an extra pass that can rescue a borderline signal but never reject
-one. One process owns the radio at a time — the detector releases it before the viewer opens.
+**HackRF safety:** leave the amp **off** (the default). HackRF's max input is −5 dBm — the amp on a
+strong nearby transmitter can damage it; use an attenuator instead. `--gain` drives LNA + VGA
+(default 24).
 
 ## Troubleshooting
-- **Nothing happens during a scan** — expected; it's headless until a signal confirms. Watch the
-  per-channel dBFS/SNR lines.
-- **A known-live VTX is rejected** — lower `margin 10`, or loosen the envelope check with
-  `--env-cv`. A floor near −10…−20 dBFS means gain is too high (clipping) → `gain 16`.
-- **Signal found but no window** — `export DISPLAY=:0` (WSLg handles this on WSL2).
-- **SoapySDR device not found** — `SoapySDRUtil --find`; install the matching `soapysdr-module-*`.
-- **BladeRF streams nothing** — its FPGA loads every power-on and the file must be named
-  `~/.config/Nuand/bladeRF/hostedxA4.rbf` (xA4) or `hostedxA9.rbf` (xA9) — the nuand download is
-  `…-latest.rbf`, rename it. `setup.sh` does this; `--check` reports it. Use a USB 3.0 port.
-- **ANTSDR not found** — `ping 192.168.1.10 && uhd_find_devices`.
+- **Nothing happens during a search** — normal; it stays in the terminal until a signal is found.
+- **A known transmitter is ignored** — lower `margin 10`; or if the level sits near −10…−20 dBFS the
+  gain is too high (`gain 16`).
+- **Signal found but no window** — `export DISPLAY=:0`.
+- **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
+- **BladeRF finds nothing** — its FPGA image must be loaded each power-on; `./setup.sh --check` reports it. Use a USB 3.0 port.
 
-## Testing
-`./tests/smoke_test.sh` verifies an install and boots the app (no radio needed).
-`./tests/docker_test.sh` runs the Linux fresh-install in clean containers. Full guide and the
-on-air hardware tests: [`tests/README.md`](tests/README.md).
-
-## Project layout
-- `setup.sh` — installer (`--check` audits without changing anything)
-- `fpv_scanner.sh` — interactive scanner: channel tables, scan→view handoff, radio management
-- `fpv_env.sh` — finds the GNU Radio Python and wires its paths
-- `fpv_detect.py` — headless detector (FFT sweep + the three gates above)
-- `fpv_viewer.py` — opens one video window for one confirmed channel
-- `fpv_display.py` — decoded frames → `ffplay` window / PNG / `ffmpeg` recording
-- `fpv_spectrum.py` — terminal FFT renderer
-- `fpv_sdr.py` — shared UHD / SoapySDR source factory
-- `vendor/gr-ntsc-rc/` — bundled NTSC decoder (pinned; see `VENDORED.md`)
-- `patches/` — the converter-bounds diff (already baked into `vendor/`)
-- `tools/`, `reference/` — standalone tune helper; original GRC flowgraph (not used at runtime)
-
-## Credits & license
-- NTSC decoder: [gr-ntsc-rc](https://github.com/lscardoso/gr-ntsc-rc) (GPLv3), vendored from PR #6.
-- ANTSDR: MicroPhase Technology.
-- This project is MIT (`LICENSE`); the vendored `vendor/gr-ntsc-rc/` tree is GPLv3 under its own
-  `LICENSE`.
-
-## Legal
-For receiving analog 5.8 GHz FPV video. You are solely responsible for complying with the laws and
-obtaining any authorization required in your jurisdiction. Provided **AS IS**, with no warranty and
-no liability. **Use at your own risk.**
+## License
+For lawful reception of 5.8 GHz FPV video only — you are responsible for the rules in your
+jurisdiction. Provided **as is**, no warranty. The bundled NTSC decoder
+([gr-ntsc-rc](https://github.com/lscardoso/gr-ntsc-rc), in `vendor/`) is GPLv3; the rest is MIT.
