@@ -1,13 +1,11 @@
 # Dragon FPV Decoder
 
-Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC link in many drones and FPV cameras; PAL is not supported)
-with a software-defined radio. All decoding runs on your computer in GNU Radio — the SDR just tunes
-and streams. Runs on Linux, macOS, and Windows.
+Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC link in many drones and FPV cameras; PAL is not supported) with a software-defined radio. 
 
-A video window opens only when a real FPV signal is found — not for every channel.
+All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
 ## What you need
-- An SDR that reaches 5.8 GHz and streams ~20 MHz: ANTSDR / USRP (UHD), or HackRF / BladeRF (SoapySDR).
+- An SDR that reaches 5.8 GHz ~20 MHz: [Supported radios](#supported-radios)
 
 ## Install
 ```bash
@@ -41,10 +39,7 @@ has WSL2 and runs everything.
 ./fpv_scanner.sh                 # ANTSDR / USRP (default)
 ./fpv_scanner.sh --sdr hackrf    # or --sdr bladerf
 ```
-Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
-channel, otherwise it prints `No FPV signals`. Use `spectrum` for FFT sweep visualiztion:
 
-<img width="934" height="392" alt="Dragon FPV Decoder scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
 | Command | Does |
 |---------|------|
@@ -53,11 +48,16 @@ channel, otherwise it prints `No FPV signals`. Use `spectrum` for FFT sweep visu
 | `sweep` | signal-strength table for all channels, no video |
 | `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
-| `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`) |
+| `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
 | `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
 | `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
+
+Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
+channel, otherwise it prints `No FPV signals`. Use `spectrum` for a live FFT view:
+
+<img width="934" height="392" alt="Dragon FPV Decoder scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
 ## Channels
 64 channels across 8 bands — Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
