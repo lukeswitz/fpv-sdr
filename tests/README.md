@@ -1,79 +1,71 @@
-# Tests
+# Testing
 
-Two layers: an **automated smoke test** (no radio needed) and **on-air hardware tests** (need a
-powered VTX). The smoke test is one portable script that runs the same on **macOS, Linux, and
-WSL2**.
+Testing is the **same 3 steps on every OS**:
 
-## Install → run, per OS
+1. `./setup.sh` — installs the stack + builds the bundled decoder. Should finish with no error.
+2. `./tests/smoke_test.sh` — should print `0 fail`.
+3. Plug in a radio, power a 5.8 GHz VTX, then `./fpv_scanner.sh --sdr hackrf` → type `scan` —
+   should find the channel and show video.
 
-Two real steps on every OS. `setup.sh` is the installer; `smoke_test.sh` then verifies the
-install **and boots the app** (no radio needed):
+Steps 1–2 prove the **software installs and runs** on that OS (no radio needed). Step 3 proves
+**real reception** (needs hardware).
+
+## Getting each OS to test on
+
+| OS | Where to run it |
+|----|-----------------|
+| **macOS** | your Mac (needs Homebrew). |
+| **Linux / DragonOS** | a real Linux box, a VM (UTM / Parallels / VirtualBox), or **Docker** (see below). |
+| **Windows** | a Windows 11 PC: install WSL2 (`wsl --install -d Ubuntu`), then run the Linux steps **inside** the Ubuntu shell. |
+
+Supported Linux = Debian/Ubuntu family (apt): **Ubuntu 20.04 / 22.04 / 24.04, Debian 12, Kali,
+Raspberry Pi OS, Linux Mint, Pop!_OS, DragonOS**. On DragonOS the decoder is prebuilt, so
+`./setup.sh` just confirms it. Non-apt distros (Fedora/Arch) aren't automated — `setup.sh` stops
+and prints the packages to install by hand, then you re-run.
+
+## Docker — validate the Linux install from your Mac
+
+One job: run **steps 1–2 for Linux** on your Mac, in a throwaway Ubuntu/Debian container, without
+building a VM. It does **not** do step 3 (no radio passthrough) and is **Linux only**.
 
 ```bash
-./setup.sh            # install the stack + build the bundled decoder (one time)
-./tests/smoke_test.sh # verify everything installed AND the scanner boots/runs
+./tests/docker_test.sh                 # ubuntu 24.04 + 22.04 + debian 12
+./tests/docker_test.sh ubuntu:24.04    # just one (faster)
 ```
 
-- **macOS / Linux / DragonOS** — run the two commands above. (DragonOS already has the decoder, so
-  `setup.sh` just confirms it.)
-- **Windows (WSL2)** — run both **inside the WSL2 Ubuntu shell**, not PowerShell. The test
-  auto-detects WSL2 and adds a `lsusb` SDR check. For USB radios, attach the device first from an
-  **Administrator PowerShell**:
-  ```powershell
-  usbipd list
-  usbipd attach --wsl --busid <BUSID>
-  ```
-  A networked ANTSDR needs no attach — check it with `ping 192.168.1.10 && uhd_find_devices`.
+Each container runs `./setup.sh` then `./tests/smoke_test.sh` and the matrix prints `PASS`/`FAIL`
+per distro. Your repo is mounted read-only, so nothing on the host changes. Needs Docker Desktop
+running. First run pulls images + builds GNU Radio, so allow ~10–20 min per distro.
 
-One command, no flags. Exit code is `0` when nothing FAILs, `1` otherwise. `WARN`/`SKIP` never
-fail the run (a `WARN` is an optional/missing piece; a `SKIP` means a check couldn't run here,
-e.g. no GNU Radio yet, so install and re-run).
+## What the smoke test checks
 
-What it verifies:
+One command, no flags. Exit `0` = nothing failed, `1` = something failed. `WARN`/`SKIP` never fail
+the run (an optional piece is missing, or a check couldn't run here yet — install and re-run).
 
 | Group | Checks |
 |-------|--------|
-| 1. Bundled decoder | `vendor/gr-ntsc-rc` present, `VENDORED.md` + GPLv3 `LICENSE` present, **converter-bounds fix baked into the source**, standalone patch kept in `patches/` |
-| 2. No moving deps | `setup.sh` does **not** fetch a PR head, `git apply` a patch, or clone upstream — it builds `vendor/` |
-| 3. Shell syntax | `bash -n` on every script; `shellcheck` if installed |
-| 4. Python | `fpv_env.sh` resolves a GNU Radio Python; `py_compile` of every module |
+| 1. Bundled decoder | `vendor/gr-ntsc-rc` present, `VENDORED.md` + GPLv3 `LICENSE` present, converter-bounds fix baked into the source, patch kept in `patches/` |
+| 2. No moving deps | `setup.sh` builds `vendor/` — no PR fetch, no `git apply`, no upstream clone |
+| 3. Shell syntax | `bash -n` every script; `shellcheck` if installed |
+| 4. Python | `fpv_env.sh` resolves a GNU Radio Python; `py_compile` every module |
 | 5. Imports | `gnuradio.gr`, `numpy`, `PIL`, `gnuradio.NTSC`, `gnuradio.soapy` |
 | 6. SDR drivers | SoapySDR factories, UHD tools, `ffplay`; on WSL2, whether an SDR is in `lsusb` |
-| 7. App boots/runs | drives `fpv_scanner.sh` headless (`list` then `quit`): confirms it boots, resolves Python, and runs a command — **no radio needed** |
+| 7. App boots/runs | drives `fpv_scanner.sh` headless (`list` then `quit`) — confirms it boots, resolves Python, runs a command (no radio) |
 
-A clean run on a fully-installed host ends with `… pass / 0 fail / … skip`.
+## Step 3 — on-air hardware tests (need a powered VTX)
 
-## On-air hardware tests (need a powered VTX)
+Same on every OS (inside WSL2 on Windows). Need an analog 5.8 GHz VTX on a known channel and the
+right antenna on the RX port.
 
-The smoke test proves the software builds and imports. These confirm real reception. You need an
-analog **5.8 GHz VTX** powered on a known channel and the right antenna on the RX port. Same steps
-on every OS (inside WSL2 on Windows).
+1. **No false window:** with no VTX powered, `scan` prints per-channel dBFS/SNR and `No FPV signals`
+   — no video window opens.
+2. **Finds the real channel:** power a VTX (e.g. A8 = 5725), `scan` → `[SIGNAL] A8 found …`, window
+   opens only on that channel. An off-nominal VTX still maps to the nearest channel, offset reported.
+3. **Rejects Wi-Fi:** busy 5 GHz Wi-Fi near the antenna, no VTX → `scan` rejects it (`No FPV signals`).
+4. **Survey table:** `sweep` prints per-channel RSSI/SNR (no gating, no video).
+5. **Spectrum:** `spectrum` or `spectrum A8` shows a hump at the VTX center.
+6. **Direct view:** `set A8` (or `freq 5725`) tunes and opens the viewer (an `ffplay` window on
+   macOS/brew).
 
-1. **Headless detect — no false window.** With **no** VTX powered:
-   ```bash
-   ./fpv_scanner.sh --sdr <hackrf|bladerf|uhd>
-   # at the prompt:
-   scan
-   ```
-   Expect: per-channel `dBFS`/SNR lines and **`No FPV signals`** — **no video window opens**.
-
-2. **Detect the real channel.** Power a VTX on a known channel (e.g. A8 = 5725) and `scan` again.
-   Expect: a `candidate … env-CV … ACCEPT` line on that channel, `[SIGNAL] A8 found …`, and the
-   video window opens **only** on that channel. An off-nominal VTX still resolves to the nearest
-   channel with the measured offset reported.
-
-3. **Wi-Fi is rejected.** With a busy 5 GHz Wi-Fi AP near the antenna and no VTX, `scan` should
-   print `env-CV` well above the threshold and **reject** it (`No FPV signals`) — broadband Wi-Fi
-   must not be reported as FPV.
-
-4. **Survey table.** `sweep` prints the per-channel RSSI/SNR table for all channels with no gating
-   and no video — the live channel should stand clearly above the noise floor.
-
-5. **Spectrum.** `spectrum` (whole band) or `spectrum A8` should show a hump at the VTX center.
-
-6. **Tune + view directly.** `set A8` (or `freq 5725`) should tune and open the viewer; on
-   macOS/brew (no `video_sdl`) the window is an `ffplay` window.
-
-Tuning knobs if a known-live TX is missed or noise sneaks through: `margin <dB>` (SNR gate),
-`--env-cv <x>` (FM constant-envelope gate), `gain <dB>` (lower if the floor sits near
-−10…−20 dBFS = clipping). See the project README **Troubleshooting** section.
+Knobs if a live TX is missed or noise sneaks through: `margin <dB>`, `--env-cv <x>`, `gain <dB>`
+(lower if the floor sits near −10…−20 dBFS = clipping). See the main README **Troubleshooting**.
