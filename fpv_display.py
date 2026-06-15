@@ -14,7 +14,7 @@ from PIL import Image
 
 class frame_sink(gr.sync_block):
     def __init__(self, width=360, height=240, out_path=None, every=15,
-                 record_path=None, record_fps=30, live=False, title='Dragon FPV',
+                 record_path=None, record_fps=30, live=False, title='FPV-SDR',
                  rotate=0):
         gr.sync_block.__init__(self, name='fpv_frame_sink',
                                in_sig=[np.int16], out_sig=[])

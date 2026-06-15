@@ -1,4 +1,4 @@
-# Dragon FPV Decoder
+# FPV-SDR
 
 Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or PAL link in many drones and FPV cameras) with a software-defined radio. Default is NTSC; pass `--standard pal` (or type `pal` at the prompt) for the 625/50 cameras common in Europe. 
 
@@ -10,8 +10,8 @@ Any supported [radio](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, B
 
 ## Install
 ```bash
-git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
-cd dragon-fpv-decoder
+git clone https://github.com/lukeswitz/fpv-sdr.git
+cd fpv-sdr
 ./setup.sh
 ```
 
@@ -58,7 +58,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
 channel, otherwise it prints `No FPV signals`. Use `spectrum` for a live FFT view:
 
-<img width="934" height="392" alt="Dragon FPV Decoder scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
+<img width="934" height="392" alt="FPV-SDR scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
 ## Channels
 64 channels across 8 bands — Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).

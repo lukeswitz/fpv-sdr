@@ -1,2 +1,2 @@
 @echo off
-wsl -d Ubuntu -- bash -lc "cd ~/dragon-fpv-decoder && ./fpv_scanner.sh %*"
+wsl -d Ubuntu -- bash -lc "cd ~/fpv-sdr && ./fpv_scanner.sh %*"

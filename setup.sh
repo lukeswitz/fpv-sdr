@@ -106,10 +106,10 @@ build_soapy_module() {
         return
     fi
     brewpfx="$(brew --prefix)"
-    local log="${TMPDIR:-/tmp}/dragon-${name}-build.log"
+    local log="${TMPDIR:-/tmp}/fpv-sdr-${name}-build.log"
     : > "$log"
     say "Building $name from source (C++ only — pulls no python; log: $log)"
-    local src="${HOME}/.cache/dragon-fpv/$name"
+    local src="${HOME}/.cache/fpv-sdr/$name"
     mkdir -p "$(dirname "$src")"
     [[ -d "$src/.git" ]] || run_quiet "$log" git clone --depth 1 "$repo" "$src"
     cd "$src" || { err "cannot enter $src"; exit 1; }
@@ -140,7 +140,7 @@ install_linux() {
     fi
     say "Installing GNU Radio + SDR stack via apt (sudo) — this can take a few minutes"
     need sudo apt-get update
-    local log="${TMPDIR:-/tmp}/dragon-apt-install.log"; : > "$log"
+    local log="${TMPDIR:-/tmp}/fpv-sdr-apt-install.log"; : > "$log"
     run_quiet "$log" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
         gnuradio gnuradio-dev soapysdr-tools \
         soapysdr-module-hackrf soapysdr-module-bladerf \
@@ -175,8 +175,8 @@ build_ntsc() {
         err "bundled gr-ntsc-rc missing at $src — re-clone the repo (it is committed, not a submodule)"
         exit 1
     fi
-    local log="${TMPDIR:-/tmp}/dragon-gr-ntsc-rc-build.log"
-    local bld="${TMPDIR:-/tmp}/dragon-gr-ntsc-rc-build"
+    local log="${TMPDIR:-/tmp}/fpv-sdr-gr-ntsc-rc-build.log"
+    local bld="${TMPDIR:-/tmp}/fpv-sdr-gr-ntsc-rc-build"
     : > "$log"
     say "Building bundled gr-ntsc-rc (PR6 + converter-bounds fix, pinned in vendor/; log: $log)"
     if [[ "$OS" == Darwin ]]; then
@@ -233,7 +233,7 @@ if [[ $CHECK_ONLY -eq 1 ]]; then
     exit 0
 fi
 
-say "Dragon FPV Decoder setup — $OS"
+say "FPV-SDR setup — $OS"
 case "$OS" in
     Darwin) install_mac ;;
     Linux)  install_linux ;;

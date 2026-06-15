@@ -51,7 +51,7 @@ class viewer(gr.top_block):
             cap_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna,
             lna=lna, vga=vga, amp=amp)
 
-        title = 'Dragon FPV %.0f MHz' % (freq / 1e6)
+        title = 'FPV-SDR %.0f MHz' % (freq / 1e6)
         self.low_pass_filter_1 = filter.fir_filter_fff(
             oversample,
             firdes.low_pass(1, cap_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))

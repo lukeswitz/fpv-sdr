@@ -15,7 +15,7 @@ function Test-WslPresent {
     return ($clean -match [regex]::Escape($Distro))
 }
 
-Write-Host '== Dragon FPV Decoder - Windows setup ==' -ForegroundColor Cyan
+Write-Host '== FPV-SDR - Windows setup ==' -ForegroundColor Cyan
 
 if (-not (Test-WslPresent)) {
     if (-not (Test-IsAdmin)) {
@@ -53,10 +53,10 @@ fi
 sudo dpkg --configure -a || true
 sudo apt-get -f install -y || true
 
-rm -rf "$HOME/dragon-fpv-decoder"
-mkdir -p "$HOME/dragon-fpv-decoder"
-cp -a "$SRC_DIR"/. "$HOME/dragon-fpv-decoder/"
-cd "$HOME/dragon-fpv-decoder"
+rm -rf "$HOME/fpv-sdr"
+mkdir -p "$HOME/fpv-sdr"
+cp -a "$SRC_DIR"/. "$HOME/fpv-sdr/"
+cd "$HOME/fpv-sdr"
 chmod +x setup.sh tests/*.sh fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py 2>/dev/null || true
 ./setup.sh
 ./tests/smoke_test.sh
@@ -82,7 +82,7 @@ $code = $LASTEXITCODE
 
 if ($code -eq 0) {
     Write-Host ''
-    Write-Host "Done. In the $Distro shell:  cd ~/dragon-fpv-decoder  then  ./fpv_scanner.sh --sdr hackrf" -ForegroundColor Green
+    Write-Host "Done. In the $Distro shell:  cd ~/fpv-sdr  then  ./fpv_scanner.sh --sdr hackrf" -ForegroundColor Green
     Write-Host "For a USB radio, attach it first (Admin PowerShell): usbipd list; usbipd bind --busid <id>; usbipd attach --wsl --busid <id>" -ForegroundColor Green
 } else {
     Write-Host ''

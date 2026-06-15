@@ -32,8 +32,8 @@ NTSC values sourced from the original `#define`s). Validated by `tests/test_pal_
 git clone https://github.com/lscardoso/gr-ntsc-rc.git /tmp/ntsc
 cd /tmp/ntsc
 git fetch origin pull/6/head:pr6 && git checkout pr6
-git apply /path/to/dragon-fpv-decoder/patches/gr-ntsc-rc-converter-bounds.patch
-git apply /path/to/dragon-fpv-decoder/patches/gr-ntsc-rc-pal-support.patch
-rsync -a --exclude='.git' --exclude='build' ./ /path/to/dragon-fpv-decoder/vendor/gr-ntsc-rc/
+git apply /path/to/fpv-sdr/patches/gr-ntsc-rc-converter-bounds.patch
+git apply /path/to/fpv-sdr/patches/gr-ntsc-rc-pal-support.patch
+rsync -a --exclude='.git' --exclude='build' ./ /path/to/fpv-sdr/vendor/gr-ntsc-rc/
 # then update the pinned commit above
 ```

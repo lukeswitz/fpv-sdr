@@ -18,7 +18,7 @@ have(){ command -v "$1" >/dev/null 2>&1; }
 OS="$(uname -s)"
 WSL=""
 grep -qi microsoft /proc/version 2>/dev/null && WSL=" (WSL2)"
-printf '\033[1mDragon FPV Decoder smoke test\033[0m — %s%s\n' "$OS" "$WSL"
+printf '\033[1mFPV-SDR smoke test\033[0m — %s%s\n' "$OS" "$WSL"
 printf 'repo: %s\n' "$PROJECT_DIR"
 
 hdr "1. Bundled decoder (vendored, frozen)"
@@ -77,15 +77,15 @@ fi
 CC_PY="${GR_PY:-$(command -v python3)}"
 if [[ -n "$CC_PY" ]]; then
     if "$CC_PY" -m py_compile \
-        fpv_detect.py fpv_viewer.py fpv_sdr.py fpv_spectrum.py fpv_display.py tools/fpv_tune.py 2>/tmp/dragon-pycompile.log; then
+        fpv_detect.py fpv_viewer.py fpv_sdr.py fpv_spectrum.py fpv_display.py tools/fpv_tune.py 2>/tmp/fpv-sdr-pycompile.log; then
         pass "py_compile all modules ($CC_PY)"
     else
-        fail "py_compile failed"; sed 's/^/      /' /tmp/dragon-pycompile.log
+        fail "py_compile failed"; sed 's/^/      /' /tmp/fpv-sdr-pycompile.log
     fi
-    if "$CC_PY" tests/test_pal_decode.py >/tmp/dragon-pal.log 2>&1; then
-        pass "PAL/NTSC decode math ($(grep -c -- '-> PASS' /tmp/dragon-pal.log) gradient checks; $(grep -q 'real decoder' /tmp/dragon-pal.log && echo 'incl. live C++' || echo 'model only'))"
+    if "$CC_PY" tests/test_pal_decode.py >/tmp/fpv-sdr-pal.log 2>&1; then
+        pass "PAL/NTSC decode math ($(grep -c -- '-> PASS' /tmp/fpv-sdr-pal.log) gradient checks; $(grep -q 'real decoder' /tmp/fpv-sdr-pal.log && echo 'incl. live C++' || echo 'model only'))"
     else
-        fail "PAL/NTSC decode math model failed"; sed 's/^/      /' /tmp/dragon-pal.log
+        fail "PAL/NTSC decode math model failed"; sed 's/^/      /' /tmp/fpv-sdr-pal.log
     fi
 else
     skip "no python3 found — cannot py_compile"
