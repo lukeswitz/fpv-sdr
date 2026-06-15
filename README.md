@@ -5,7 +5,8 @@ Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC li
 All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
 ## What you need
-- An SDR that reaches 5.8 GHz ~20 MHz: [Supported radios](#supported-radios)
+Any supported [radio](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR.
+
 
 ## Install
 ```bash
@@ -13,11 +14,13 @@ git clone https://github.com/lukeswitz/dragon-fpv-decoder.git
 cd dragon-fpv-decoder
 ./setup.sh
 ```
-`./setup.sh` installs everything for your OS and builds the decoder. `./setup.sh --check` only
+
+> [!NOTE]
+> `./setup.sh` installs everything for your OS and builds the decoder. `./setup.sh --check` only
 reports what's installed.
 
 - **DragonOS** — everything is prebuilt; `./setup.sh` just confirms it.
-- **Linux (Debian / Ubuntu)** — `./setup.sh` installs via apt. Fedora / Arch: it prints the packages to install, then re-run it.
+- **Linux (Debian / Ubuntu)** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 - **Windows** — see below.
 
@@ -28,11 +31,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 .\run.cmd --sdr hackrf      # run  (leave off --sdr for ANTSDR / USRP)
 ```
 
-**Running Windows in a VM on a Mac (Parallels)?** WSL needs nested virtualization, which only
-**M3 or newer** Macs have. On an **M1 / M2 Mac you get WSL1**: the tool installs and the terminal
-parts (`scan`, `sweep`, `spectrum`) work with a **networked ANTSDR**, but **USB radios and the video
-window won't** — those need WSL2, i.e. a physical Windows PC or an M3+ Mac. A physical Windows PC
-has WSL2 and runs everything.
+
 
 ## Run
 ```bash
