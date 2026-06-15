@@ -134,7 +134,7 @@ install_linux() {
         err "Non-apt Linux detected."
         echo "  Install: gnuradio gnuradio-dev (gr-soapy ships inside gnuradio), soapysdr-tools,"
         echo "  the SoapySDR device modules (hackrf/bladerf), uhd-host, ffmpeg, cmake, g++, git,"
-        echo "  python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev"
+        echo "  python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev"
         echo "  then re-run:  ./setup.sh --check"
         exit 1
     fi
@@ -144,7 +144,7 @@ install_linux() {
         gnuradio gnuradio-dev soapysdr-tools \
         soapysdr-module-hackrf soapysdr-module-bladerf \
         uhd-host ffmpeg cmake g++ git pkg-config \
-        python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev
+        python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev
 }
 
 install_pydeps() {
