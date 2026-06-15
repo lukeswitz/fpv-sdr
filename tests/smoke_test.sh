@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Dragon FPV Decoder — cross-OS smoke test (macOS / Linux / WSL2).
-# Static checks run anywhere; runtime checks run when GNU Radio is installed.
-#   ./tests/smoke_test.sh               static + (runtime if GNU Radio present)
-#   ./tests/smoke_test.sh --build-ntsc  also build vendor/gr-ntsc-rc into a throwaway prefix and import it
-#   ./tests/smoke_test.sh --check       also run ./setup.sh --check
+# Run AFTER ./setup.sh. Verifies the install and boots the app (no radio needed).
+#   ./tests/smoke_test.sh               verify the install + boot the scanner
+#   ./tests/smoke_test.sh --build-ntsc  also build vendor/gr-ntsc-rc and import it
 # Exit code: 0 = no failures, 1 = one or more FAIL.
 
 set -o pipefail
@@ -11,12 +10,10 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 DO_BUILD=0
-DO_CHECK=0
 for a in "$@"; do
     case "$a" in
         --build-ntsc) DO_BUILD=1 ;;
-        --check)      DO_CHECK=1 ;;
-        -h|--help)    sed -n '2,7p' "$0"; exit 0 ;;
+        -h|--help)    sed -n '2,6p' "$0"; exit 0 ;;
         *) echo "unknown arg: $a (try --help)"; exit 1 ;;
     esac
 done
@@ -130,9 +127,22 @@ if [[ -n "$WSL" ]]; then
     have lsusb && { n="$(lsusb 2>/dev/null | grep -ciE 'great scott|hackrf|nuand|ettus|analog devices')"; [[ "$n" -gt 0 ]] && pass "WSL2: an SDR is visible to lsusb ($n)" || warn "WSL2: no SDR in lsusb — run 'usbipd attach --wsl --busid <id>' in admin PowerShell"; } || skip "lsusb not found"
 fi
 
+hdr "7. App boots and runs (no radio needed)"
+if [[ -z "$GR_PY" ]]; then
+    skip "no GNU Radio Python — the scanner won't start (install per README, then re-run)"
+else
+    boot="$(printf 'list\nquit\n' | FPV_PYTHON="$GR_PY" ./fpv_scanner.sh 2>&1)"; brc=$?
+    if [[ "$brc" -eq 0 ]] && printf '%s' "$boot" | grep -q "FPV Scanner initialized"; then
+        pass "fpv_scanner.sh boots (sources env, resolves Python, renders menu)"
+    else
+        fail "fpv_scanner.sh did not boot cleanly (exit $brc)"; printf '%s\n' "$boot" | tail -8 | sed 's/^/      /'
+    fi
+    printf '%s' "$boot" | grep -q "Raceband" && pass "scanner ran a command ('list' rendered the channel table)" || fail "'list' produced no channel table"
+fi
+
 # -------------------------------------------------- optional: build
 if [[ "$DO_BUILD" -eq 1 ]]; then
-    hdr "7. Build the vendored decoder (throwaway prefix)"
+    hdr "8. Build the vendored decoder (throwaway prefix)"
     if [[ -z "$GR_PY" ]]; then
         skip "no GNU Radio Python — cannot build the decoder"
     elif ! have cmake; then
@@ -160,12 +170,6 @@ if [[ "$DO_BUILD" -eq 1 ]]; then
         fi
         rm -rf "$tmp"
     fi
-fi
-
-# -------------------------------------------------- optional: --check
-if [[ "$DO_CHECK" -eq 1 ]]; then
-    hdr "8. setup.sh --check"
-    ./setup.sh --check
 fi
 
 # ---------------------------------------------------------- summary
