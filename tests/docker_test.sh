@@ -22,9 +22,10 @@ RESULTS=()
 fail=0
 for img in "${IMAGES[@]}"; do
     printf '\n\033[1;36m==================== %s ====================\033[0m\n' "$img"
-    if docker run --rm -v "$PROJECT_DIR":/src:ro "$img" bash -c "
+    if docker run --rm -e DEBIAN_FRONTEND=noninteractive -e TZ=Etc/UTC \
+        -v "$PROJECT_DIR":/src:ro "$img" bash -c "
         set -e
-        export DEBIAN_FRONTEND=noninteractive
+        ln -snf /usr/share/zoneinfo/Etc/UTC /etc/localtime
         apt-get update -qq
         apt-get install -y -qq sudo rsync ca-certificates git >/dev/null
         rsync -a --exclude=.git --exclude=__pycache__ /src/ /work/
