@@ -49,21 +49,25 @@ brew's GNU Radio has no `video_sdl`, so the viewer uses an `ffplay` window (same
 `fpv_env.sh` locates the GNU Radio Python automatically; set `FPV_PYTHON` to override.
 
 ### Windows (WSL2)
-No native Windows build — run it inside WSL2 Ubuntu.
+No native Windows build — it runs inside WSL2 Ubuntu, and `setup.ps1` bootstraps that for you. In
+PowerShell, from the project folder:
 ```powershell
-wsl --install -d Ubuntu
+.\setup.ps1
 ```
-Then follow the Linux steps inside Ubuntu. A networked ANTSDR works over normal networking; a USB
-radio (HackRF/BladeRF) must be passed in with [usbipd-win](https://github.com/dorssel/usbipd-win)
-from an Administrator PowerShell:
+`setup.ps1` checks for WSL2 + Ubuntu and installs them if missing (run PowerShell **as
+Administrator** for that step; reboot once if Windows asks, then re-run), copies the project into
+Ubuntu, and runs `./setup.sh` + the smoke test. If PowerShell blocks the script, run
+`powershell -ExecutionPolicy Bypass -File .\setup.ps1`.
+
+For a USB radio (HackRF/BladeRF), attach it from an Administrator PowerShell first:
 ```powershell
 winget install dorssel.usbipd-win
 usbipd list
 usbipd bind   --busid <BUSID>
 usbipd attach --wsl --busid <BUSID>
 ```
-The decoded-video window uses WSLg (built into Windows 11). **This path is documented but has not
-been tested on real Windows hardware.**
+A networked ANTSDR needs no attach. The video window uses WSLg (Windows 11). **The Windows path is
+not yet tested on real hardware — `setup.ps1` has not been run on Windows.**
 
 ## Run
 ```bash
