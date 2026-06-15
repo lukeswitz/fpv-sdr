@@ -48,26 +48,37 @@ builds the decoder into `~/.local`.
 brew's GNU Radio has no `video_sdl`, so the viewer uses an `ffplay` window (same decode).
 `fpv_env.sh` locates the GNU Radio Python automatically; set `FPV_PYTHON` to override.
 
-### Windows (WSL2)
-No native build — it runs inside WSL2 Ubuntu. From the project folder, run:
-```powershell
-.\setup.cmd
-```
-(or just double-click `setup.cmd`). It installs WSL2 + Ubuntu if they're missing — run it **as
-Administrator** the first time, reboot if Windows asks, then run it again — and then installs and
-smoke-tests everything inside Ubuntu. `setup.cmd` only launches `setup.ps1` past the PowerShell
-execution policy; it changes no machine settings.
-
-For a USB radio (HackRF/BladeRF), attach it into WSL once per session from an **Administrator**
+### Windows (via WSL)
+No native build — it runs inside WSL Ubuntu. Two commands, both from the project folder in
 PowerShell:
+```powershell
+.\setup.cmd                 # install: sets up WSL + Ubuntu, builds + smoke-tests inside it
+.\run.cmd --sdr hackrf      # run: launches the scanner inside WSL (omit --sdr for UHD/ANTSDR)
+```
+`setup.cmd` installs WSL + Ubuntu if missing (run **as Administrator** the first time; reboot if
+Windows asks, then run it again), then builds and smoke-tests everything inside Ubuntu — it only
+launches `setup.ps1` past the execution policy, no machine settings changed. `run.cmd` starts the
+scanner inside WSL so you don't have to open the Ubuntu shell yourself.
+
+**WSL1 vs WSL2 — what actually works.** WSL2 needs nested virtualization: on Apple Silicon that
+requires an **M3 or newer** Mac (macOS 15+); on **M1/M2 you get WSL1**; on a physical PC or Intel
+Mac you get WSL2.
+
+| Capability | WSL1 (M1/M2 Mac) | WSL2 (M3+ Mac, PC) |
+|---|:---:|:---:|
+| Install + `scan` / `sweep` / `spectrum` (terminal) | ✅ | ✅ |
+| Networked ANTSDR (Ethernet) | ✅ | ✅ |
+| USB radio (HackRF / BladeRF) | ❌ needs WSL2 | ✅ via `usbipd` |
+| Live video window | ❌ needs WSLg / X server | ✅ WSLg |
+
+For a USB radio on WSL2, attach it once per session from an **Administrator** PowerShell:
 ```powershell
 winget install dorssel.usbipd-win
 usbipd list
 usbipd attach --wsl --busid <BUSID>
 ```
-A networked ANTSDR needs no attach. The video window uses WSLg (Windows 11). Verified on WSL2
-Ubuntu — install + smoke test pass; **on-air reception with a real radio is still untested on
-Windows.**
+Verified: install + smoke test pass on WSL (including WSL1 on an M1 Mac). On-air reception with a
+real radio on Windows is untested.
 
 ## Run
 ```bash

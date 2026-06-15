@@ -60,6 +60,17 @@ cd "$HOME/dragon-fpv-decoder"
 chmod +x setup.sh tests/*.sh fpv_scanner.sh fpv_detect.py fpv_viewer.py fpv_sdr.py 2>/dev/null || true
 ./setup.sh
 ./tests/smoke_test.sh
+
+echo ""
+echo "=== How to run the scanner ==="
+echo "  Windows PowerShell:  run.cmd --sdr hackrf"
+echo "  Ubuntu shell:        ./fpv_scanner.sh --sdr hackrf       then type: scan"
+if on_wsl1; then
+  echo ""
+  echo "NOTE: WSL1 detected. USB radios (HackRF/BladeRF) and the live video window need WSL2,"
+  echo "which Apple Silicon supports only on M3+ Macs. On this machine, use a networked ANTSDR,"
+  echo "or run scan / sweep / spectrum in the terminal (no USB device or display required)."
+fi
 '@
 
 $bash = $bash -replace "`r`n", "`n"
