@@ -37,8 +37,7 @@ function Convert-ToWsl2 {
     & wsl.exe --set-default-version 2 2>$null | Out-Null
     & wsl.exe --set-version $Distro 2
     if ($LASTEXITCODE -ne 0) {
-        Write-Host 'Conversion failed. Enable VirtualMachinePlatform, reboot, then re-run this script:' -ForegroundColor Red
-        Write-Host '  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart' -ForegroundColor Yellow
+        Show-Wsl2Blocked (Get-HostEnv)
         exit 1
     }
     & wsl.exe --shutdown 2>$null | Out-Null
@@ -51,7 +50,46 @@ function Enable-Systemd {
     & wsl.exe --shutdown 2>$null | Out-Null
 }
 
+function Get-HostEnv {
+    try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { return 'unknown' }
+    $m = "$($cs.Manufacturer) $($cs.Model)"
+    if ($m -match 'Parallels') { return 'parallels' }
+    if ($m -match 'VMware') { return 'vmware' }
+    if ($m -match 'VirtualBox|innotek|Oracle') { return 'virtualbox' }
+    if ($m -match 'QEMU|KVM') { return 'qemu' }
+    if ($m -match 'Microsoft Corporation' -and $m -match 'Virtual Machine') { return 'hyperv' }
+    return 'physical'
+}
+
+function Test-ArmCpu {
+    return ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64')
+}
+
+function Show-Wsl2Blocked {
+    param([string]$HostEnv)
+    if ($HostEnv -eq 'parallels' -and (Test-ArmCpu)) {
+        Write-Host 'WSL2 cannot start: Parallels on an Apple Silicon Mac.' -ForegroundColor Red
+        Write-Host 'WSL2 needs nested virtualization, which Apple Silicon supports only on M3 or newer (macOS 15+).' -ForegroundColor Yellow
+        Write-Host 'On an M1/M2 Mac it is not possible. Use a physical Windows PC, or an M3+ Mac with nested virtualization' -ForegroundColor Yellow
+        Write-Host 'enabled in the VM settings (shut the VM down first: Hardware > CPU & Memory > Advanced).' -ForegroundColor Yellow
+    } elseif ($HostEnv -in @('parallels', 'vmware', 'virtualbox', 'qemu')) {
+        Write-Host "WSL2 cannot start inside this $HostEnv VM." -ForegroundColor Red
+        Write-Host 'Enable nested virtualization in the VM settings (with the VM powered off), then re-run this script.' -ForegroundColor Yellow
+    } else {
+        Write-Host 'WSL2 cannot start: hardware virtualization is off.' -ForegroundColor Red
+        Write-Host 'Turn on virtualization (VT-x/AMD-V/SVM) in firmware/BIOS, enable Virtual Machine Platform, reboot, then re-run:' -ForegroundColor Yellow
+        Write-Host '  dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart' -ForegroundColor Yellow
+    }
+}
+
 Write-Host '== Dragon FPV Decoder - Windows setup ==' -ForegroundColor Cyan
+$HostEnv = Get-HostEnv
+if ($HostEnv -notin @('physical', 'unknown')) {
+    Write-Host "Detected: running inside a $HostEnv virtual machine ($env:PROCESSOR_ARCHITECTURE)." -ForegroundColor DarkGray
+    if ($HostEnv -eq 'parallels' -and (Test-ArmCpu)) {
+        Write-Host 'Heads-up: WSL2 on Parallels needs an M3+ Mac (macOS 15+). On M1/M2 it will not start.' -ForegroundColor DarkYellow
+    }
+}
 
 if (-not (Test-WslReady)) {
     if (-not (Test-IsAdmin)) {
