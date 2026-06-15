@@ -1,6 +1,6 @@
 # FPV-SDR
 
-Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or PAL link in many drones and FPV cameras) with a software-defined radio. Default is NTSC; pass `--standard pal` (or type `pal` at the prompt) for the 625/50 cameras common in Europe. 
+Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or PAL link in many drones and FPV cameras) with a software-defined radio.
 
 All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
@@ -32,7 +32,6 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 ```
 
 
-
 ## Run
 ```bash
 ./fpv_scanner.sh                 # ANTSDR / USRP (default)
@@ -54,6 +53,10 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
 | `standard <ntsc\|pal>` (or `pal` / `ntsc`) | switch video standard — `pal` = 625/50, 360×288 (EU cameras); default `ntsc` |
 | `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
+
+
+> Default is NTSC; pass `--standard pal` (or type `pal` at the prompt) for the 625/50 cameras common in Europe. 
+
 
 Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
 channel, otherwise it prints `No FPV signals`. Use `spectrum` for a live FFT view:
