@@ -180,14 +180,15 @@ build_ntsc() {
     : > "$log"
     say "Building bundled gr-ntsc-rc (PR6 + converter-bounds fix, pinned in vendor/; log: $log)"
     if [[ "$OS" == Darwin ]]; then
-        local brewpfx pyver
+        local brewpfx pyver pyexe
         brewpfx="$(brew --prefix)"
         pyver="$("$PYTHON" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
+        pyexe="$("$PYTHON" -c 'import sys;print(sys.executable)')"
         run_quiet "$log" cmake -S "$src" -B "$bld" \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_PREFIX_PATH="$brewpfx" \
             -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
-            -DPYTHON_EXECUTABLE="$PYTHON" \
+            -DPYTHON_EXECUTABLE="$pyexe" \
             -DGR_PYTHON_DIR="$HOME/.local/lib/$pyver/site-packages"
         run_quiet "$log" cmake --build "$bld" -j"$(sysctl -n hw.ncpu)"
         run_quiet "$log" cmake --install "$bld"
