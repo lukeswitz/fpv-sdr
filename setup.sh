@@ -179,21 +179,32 @@ build_ntsc() {
     local bld="${TMPDIR:-/tmp}/fpv-sdr-gr-ntsc-rc-build"
     : > "$log"
     say "Building bundled gr-ntsc-rc (PR6 + converter-bounds fix, pinned in vendor/; log: $log)"
+    local pyexe npinc
+    pyexe="$("$PYTHON" -c 'import sys;print(sys.executable)')"
+    npinc="$("$PYTHON" -c 'import numpy;print(numpy.get_include())' 2>/dev/null)"
+    if [[ -z "$npinc" || ! -f "$npinc/numpy/arrayobject.h" ]]; then
+        err "numpy C headers not found for $PYTHON — the bindings need <numpy/arrayobject.h>"
+        err "install them with:  $PYTHON -m pip install --user numpy   (then re-run ./setup.sh)"
+        exit 1
+    fi
     if [[ "$OS" == Darwin ]]; then
-        local brewpfx pyver pyexe
+        local brewpfx pyver
         brewpfx="$(brew --prefix)"
         pyver="$("$PYTHON" -c 'import sys;print("python%d.%d"%sys.version_info[:2])')"
-        pyexe="$("$PYTHON" -c 'import sys;print(sys.executable)')"
         run_quiet "$log" cmake -S "$src" -B "$bld" \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_PREFIX_PATH="$brewpfx" \
             -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
             -DPYTHON_EXECUTABLE="$pyexe" \
+            -DPython_NumPy_INCLUDE_DIR="$npinc" \
             -DGR_PYTHON_DIR="$HOME/.local/lib/$pyver/site-packages"
         run_quiet "$log" cmake --build "$bld" -j"$(sysctl -n hw.ncpu)"
         run_quiet "$log" cmake --install "$bld"
     else
-        run_quiet "$log" cmake -S "$src" -B "$bld" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run_quiet "$log" cmake -S "$src" -B "$bld" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DPYTHON_EXECUTABLE="$pyexe" \
+            -DPython_NumPy_INCLUDE_DIR="$npinc"
         run_quiet "$log" cmake --build "$bld" -j"$(nproc)"
         run_quiet "$log" sudo cmake --install "$bld"
         sudo ldconfig || true
