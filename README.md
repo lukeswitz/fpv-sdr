@@ -1,22 +1,29 @@
-# FPV-SDR
+<div align="center">
 
-Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or PAL link in many drones and FPV cameras) with a software-defined radio.
+<img width="300" alt="edited-photo-4" src="https://github.com/user-attachments/assets/4ed632ec-ba41-429c-a893-c17e84f74164" />
 
-All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
+
+Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in many drones and FPV cameras) with common software-defined radios. **Runs on Linux, macOS, and Windows.**
+
+</div>
+
+---
 
 ## What you need
-Nearly any [SDR](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR & others 
+
+- A [supported SDR](#supported-radios) that reaches 5.8 GHz
+- Linux/Widows/macOS machine
 
 
 ## Install
 ```bash
 git clone https://github.com/lukeswitz/fpv-sdr.git
 cd fpv-sdr
-./setup.sh
+./setup.sh 
 ```
 
-> `./setup.sh` installs everything for your OS and builds the decoder. `./setup.sh --check` only
-reports what's installed.
+> [!TIP]
+> Run `./setup.sh --check` to report what's already installed
 
 - **DragonOS** — everything is prebuilt; `./setup.sh` just confirms it.
 - **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
@@ -56,14 +63,17 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 > Default is NTSC; use `--standard pal` (or type `pal` at the prompt) for 625/50 PAL cameras. 
 
 
-Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
-channel, otherwise it prints `No FPV signals`. Use `spectrum` for a live FFT view:
+- Dial in your settings for your radio (defaults should be ok)
+- Run `scan` to search every channel; if it finds a real FPV signal it opens the video on that
+channel, use `scan loop` for constant monitoring.
+
+The `spectrum` command takes args for channel, use `spectrum live` to keep it updating:
 
 <img width="934" height="392" alt="FPV-SDR scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
 ## Channels
-64 channels across 8 bands — Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
-Type `list` to see them all.
+64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
+**Type `list` to see them all.**
 
 ## Supported radios
 
@@ -77,7 +87,7 @@ Type `list` to see them all.
 | LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
 
 > [!IMPORTANT]
-> Ensure the gain settings are not too high for your device. Do not turn on the HackRF amp.
+> Ensure the gain settings are correct for your device before running. Keep that hackRF amp off ;)
 
 ## Troubleshooting
 - **Nothing happens during a search** — normal; it stays in the terminal until a signal is found.
