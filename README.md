@@ -5,7 +5,7 @@ Receive and decode analog **5.8 GHz FPV video** (the FM-modulated analog NTSC or
 All decoding runs on your computer in GNU Radio, the SDR just tunes and streams. **Runs on Linux, macOS, and Windows.**
 
 ## What you need
-Any supported [radio](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR, USRP ...
+Nearly any [SDR](#supported-radios) that reaches 5.8 GHz ~20 MHz: HackRF, BladeRF, ANTSDR & others 
 
 
 ## Install
@@ -15,14 +15,12 @@ cd fpv-sdr
 ./setup.sh
 ```
 
-> [!NOTE]
 > `./setup.sh` installs everything for your OS and builds the decoder. `./setup.sh --check` only
 reports what's installed.
 
 - **DragonOS** — everything is prebuilt; `./setup.sh` just confirms it.
-- **Linux (Debian / Ubuntu)** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
+- **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
-- **Windows** — see below.
 
 ### Windows
 The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
@@ -55,7 +53,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
 
 
-> Default is NTSC; pass `--standard pal` (or type `pal` at the prompt) for the 625/50 cameras common in Europe. 
+> Default is NTSC; use `--standard pal` (or type `pal` at the prompt) for 625/50 PAL cameras. 
 
 
 Type `scan`. It searches every channel; if it finds a real FPV signal it opens the video on that
