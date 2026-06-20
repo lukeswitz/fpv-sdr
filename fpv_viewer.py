@@ -31,6 +31,8 @@ except Exception:
 from fpv_sdr import build_source, quad_demod_gain, UHD_ALIASES
 from fpv_display import frame_sink
 
+LOCK_FULL = 5.0
+
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
@@ -76,20 +78,37 @@ class viewer(gr.top_block):
         self.connect((self.NTSC_decoder_c_0, 2), (self.NTSC_video_stream_converter_c_0, 2))
         self.connect((self.NTSC_decoder_c_0, 3), (self.NTSC_video_stream_converter_c_0, 3))
 
+        self.frame_px = self.vid_w * self.vid_h
+        self.line_px = self.vid_w
+        self.sync_center = self.frame_px
+        self.sync_off = self.sync_center
+        self.v_lines = 0
+        self.h_px = 0
+        self.sync_delay = blocks.delay(gr.sizeof_short, self.sync_center)
+        self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.sync_delay, 0))
+
+        lock_win = max(1, int(samp_rate * 0.02))
+        self.lock_state = blocks.add_const_ff(-1.0)
+        self.lock_abs = blocks.abs_ff(1)
+        self.lock_avg = blocks.moving_average_ff(lock_win, 1.0 / lock_win, 4000, 1)
+        self.lock_probe = blocks.probe_signal_f()
+        self.connect((self.NTSC_decoder_c_0, 0), self.lock_state,
+                     self.lock_abs, self.lock_avg, self.lock_probe)
+
         self.recorder = None
         self.frame_sink_0 = None
         if HAVE_SDL:
             self.video_sdl_sink_0 = video_sdl.sink_s(
                 0, self.vid_w, self.vid_h, (self.vid_w * 2), (self.vid_h * 2))
-            self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.video_sdl_sink_0, 0))
+            self.connect((self.sync_delay, 0), (self.video_sdl_sink_0, 0))
             if record_path:
                 self.recorder = frame_sink(self.vid_w, self.vid_h, None, record_path=record_path, rotate=rotate)
-                self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.recorder, 0))
+                self.connect((self.sync_delay, 0), (self.recorder, 0))
         else:
             self.frame_sink_0 = frame_sink(
                 self.vid_w, self.vid_h, frame_out, record_path=record_path, live=live, title=title,
                 rotate=rotate)
-            self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.frame_sink_0, 0))
+            self.connect((self.sync_delay, 0), (self.frame_sink_0, 0))
 
     def retune(self, freq):
         self.frequency_carrier = freq
@@ -98,8 +117,107 @@ class viewer(gr.top_block):
     def set_contrast(self, contrast):
         self.analog_quadrature_demod_cf_0.set_gain(quad_demod_gain(self.cap_rate) * contrast)
 
+    def _apply_sync(self):
+        off = self.sync_center + self.v_lines * self.line_px + self.h_px
+        self.sync_off = max(0, min(2 * self.frame_px, off))
+        self.sync_delay.set_dly(self.sync_off)
+
+    def reset_sync(self):
+        self.v_lines = 0
+        self.h_px = 0
+        self._apply_sync()
+
+    def nudge_v(self, lines):
+        self.v_lines = max(-(self.vid_h - 1), min(self.vid_h - 1, self.v_lines + lines))
+        self._apply_sync()
+
+    def nudge_h(self, px):
+        self.h_px = max(-(self.line_px - 1), min(self.line_px - 1, self.h_px + px))
+        self._apply_sync()
+
+    def sync_status(self):
+        return self.v_lines, self.h_px
+
+    def lock_metric(self):
+        return self.lock_probe.level()
+
+    def lock_pct(self):
+        return max(0, min(100, int(self.lock_probe.level() / LOCK_FULL * 100)))
+
     def window_closed(self):
         return self.frame_sink_0 is not None and self.frame_sink_0.closed
+
+
+def keys_available():
+    if not sys.stdin.isatty():
+        return False
+    try:
+        import termios  # noqa: F401
+        return os.tcgetpgrp(sys.stdin.fileno()) == os.getpgrp()
+    except (ImportError, OSError):
+        return False
+
+
+def _parse_keys(buf):
+    s = buf.decode('latin-1')
+    arrows = {'A': 'up', 'B': 'down', 'C': 'right', 'D': 'left'}
+    keys = []
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c == '\x1b':
+            if s[i + 1:i + 2] in ('[', 'O'):
+                keys.append(arrows.get(s[i + 2:i + 3], ''))
+                i += 3
+            else:
+                i += 1
+        else:
+            keys.append(c)
+            i += 1
+    return [k for k in keys if k]
+
+
+def run_sync_tuner(tb):
+    import termios
+    import select
+
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    sys.stderr.write(
+        "[fpv] sync tuner: up/down = vertical hold, left/right = horizontal, "
+        "r = reset, q = quit\n")
+    try:
+        raw = termios.tcgetattr(fd)
+        raw[3] = raw[3] & ~(termios.ICANON | termios.ECHO)
+        termios.tcsetattr(fd, termios.TCSANOW, raw)
+        sys.stdout.write("\x1b[?1l\x1b[?1004l\x1b[?1000l\x1b[?1003l")
+        sys.stdout.flush()
+        while not tb.window_closed():
+            r, _, _ = select.select([fd], [], [], 0.2)
+            if r:
+                for key in _parse_keys(os.read(fd, 256)):
+                    if key == 'up':
+                        tb.nudge_v(-1)
+                    elif key == 'down':
+                        tb.nudge_v(1)
+                    elif key == 'left':
+                        tb.nudge_h(-1)
+                    elif key == 'right':
+                        tb.nudge_h(1)
+                    elif key in ('r', 'R'):
+                        tb.reset_sync()
+                    elif key in ('q', 'Q', '\x03'):
+                        return
+            v, h = tb.sync_status()
+            sys.stdout.write(
+                "\r[sync] V:%+4d lines  H:%+4d px   lock:%3d%%\x1b[K" %
+                (v, h, tb.lock_pct()))
+            sys.stdout.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def main():
@@ -133,6 +251,8 @@ def main():
     ap.add_argument('--standard', choices=('ntsc', 'pal'), default='ntsc',
                     help='analog video standard: ntsc (525/60, 360x240, default) or '
                          'pal (625/50, 360x288 — common on EU FPV cameras)')
+    ap.add_argument('--no-keys', action='store_true',
+                    help='disable the interactive arrow-key vertical/horizontal sync tuner')
     args = ap.parse_args()
 
     if not HAVE_NTSC:
@@ -160,8 +280,11 @@ def main():
 
     tb.start()
     try:
-        while not tb.window_closed():
-            time.sleep(0.2)
+        if not args.no_keys and keys_available():
+            run_sync_tuner(tb)
+        else:
+            while not tb.window_closed():
+                time.sleep(0.2)
     except (EOFError, KeyboardInterrupt):
         pass
 

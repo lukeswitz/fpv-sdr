@@ -71,6 +71,20 @@ The `spectrum` command takes args for channel, use `spectrum live` to keep it up
 
 <img width="934" height="392" alt="FPV-SDR scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
+### Tuning the picture (vertical / horizontal hold)
+
+A weak vertical or horizontal sync makes the picture roll or tear (common on PAL).
+When the scanner opens the video (after `scan`, `set <CH>`, or `freq <MHz>`), tune it
+live from the same terminal with the arrow keys:
+
+- **↑ / ↓** — vertical hold (stop the picture rolling up/down)
+- **← / →** — horizontal hold (centre the picture)
+- **r** reset · **q** back to the scanner menu
+
+The terminal shows the live `V` / `H` offset and a `lock` meter (≈0 on noise, rises
+on a real video signal — so you can tell you're synced to an actual picture, not snow).
+PAL often locks better at `--samp-rate 18e6`.
+
 ## Channels
 64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
 **Type `list` to see them all.**
@@ -94,6 +108,7 @@ The `spectrum` command takes args for channel, use `spectrum live` to keep it up
 - **A known transmitter is ignored** — lower `margin 10`; or if the level sits near −10…−20 dBFS the
   gain is too high (`gain 16`).
 - **Signal found but no window** — `export DISPLAY=:0`.
+- **Window opens but picture rolls / looks like snow** — sync isn't locked. Run the viewer in the foreground and use the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)); watch the `lock` meter to confirm a real signal. PAL often needs `--samp-rate 18e6`.
 - **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
 - **BladeRF finds nothing** — its FPGA image must be loaded each power-on; `./setup.sh --check` reports it. Use a USB 3.0 port.
 

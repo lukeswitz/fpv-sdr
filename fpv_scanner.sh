@@ -12,7 +12,8 @@ GAIN_SET=""; [[ -n "$FPV_GAIN" ]] && GAIN_SET=1
 LNA="${FPV_LNA:-}"
 VGA="${FPV_VGA:-}"
 AMP="${FPV_AMP:-}"
-SAMP_RATE="${FPV_SAMP_RATE:-10e6}"
+SAMP_RATE="${FPV_SAMP_RATE:-}"
+SR_SET=""; [[ -n "$FPV_SAMP_RATE" ]] && SR_SET=1
 DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-}"
 DSR_SET=""; [[ -n "$FPV_DETECT_SAMP_RATE" ]] && DSR_SET=1
 ROTATE="${FPV_ROTATE:-0}"
@@ -36,7 +37,7 @@ while [[ $# -gt 0 ]]; do
         --lna) LNA="$2"; shift 2 ;;
         --vga) VGA="$2"; shift 2 ;;
         --amp) AMP=1; shift ;;
-        --samp-rate) SAMP_RATE="$2"; shift 2 ;;
+        --samp-rate) SAMP_RATE="$2"; SR_SET=1; shift 2 ;;
         --margin) MARGIN="$2"; shift 2 ;;
         --dev-args) DEV_ARGS="$2"; shift 2 ;;
         --antenna) ANTENNA="$2"; shift 2 ;;
@@ -87,7 +88,7 @@ CURRENT_CHANNEL=""
 resolve_gain() {
     if [[ -z "$GAIN" ]]; then
         case "$SDR" in
-            hackrf)  GAIN=24 ;;
+            hackrf)  GAIN=32 ;;
             bladerf) GAIN=20 ;;
             *)       GAIN=30 ;;
         esac
@@ -99,6 +100,14 @@ resolve_speed() {
         case "$SDR" in
             hackrf) DETECT_SAMP_RATE=20e6 ;;
             *)      DETECT_SAMP_RATE=40e6 ;;
+        esac
+    fi
+    if [[ -z "$SR_SET" ]]; then
+        case "$SDR" in
+            hackrf)  SAMP_RATE=12e6 ;;
+            pluto)   SAMP_RATE=6e6 ;;
+            bladerf) SAMP_RATE=16e6 ;;
+            *)       SAMP_RATE=20e6 ;;
         esac
     fi
     if [[ -z "$SETTLE_SET" ]]; then
@@ -146,6 +155,7 @@ set_frequency() {
     release_sdr
 
     cd "$PROJECT_DIR" || return 1
+    echo "[INFO] arrow keys tune vertical/horizontal sync, 'q' returns to the menu"
     DISPLAY="${DISPLAY:-:0}" "$PYTHON" "$VIEWER_PY" \
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
@@ -153,9 +163,8 @@ set_frequency() {
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         ${RECORD:+--record "$RECORD"} \
-        ${VIEW_EXTRA} \
-        >/dev/null 2>&1 &
-    TB_INSTANCE=$!
+        ${VIEW_EXTRA}
+    TB_INSTANCE=""
 
     CURRENT_FREQ=$freq_mhz
     CURRENT_CHANNEL=$channel_name
@@ -407,6 +416,7 @@ show_menu() {
         "record <file>"   "record video; bare 'record' = off" \
         "rotate <deg>"    "0|90|180|270 (def ${ROTATE})" \
         "contrast <x>"    "demod contrast (def ${CONTRAST})" \
+        "samp-rate <Msps>" "capture bandwidth, e.g. 20 or 10 (now ${SAMP_RATE})" \
         "standard <std>"  "video standard ntsc|pal (def ${STANDARD})" \
         "log"             "show scan log" \
         "quit"            "exit"
@@ -438,7 +448,7 @@ main() {
 
     resolve_gain
     resolve_speed
-    echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN, samp_rate: $SAMP_RATE)"
+    echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN${LNA:+ LNA:$LNA}${VGA:+ VGA:$VGA}, samp_rate: $SAMP_RATE)"
     echo "[INFO] Python: $PYTHON"
     echo "[INFO] Log file: $SCAN_LOG"
     echo "[INFO] No video window opens until a signal is detected — type 'scan' to begin."
@@ -491,7 +501,7 @@ main() {
             gain)
                 if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
                     GAIN="$arg1"; GAIN_SET=1
-                    echo "[INFO] Gain set to $GAIN dB (applies on next tune/scan)"
+                    echo "[INFO] Gain set to $GAIN dB (HackRF: base for LNA+VGA unless lna/vga set)"
                 else
                     echo "[ERROR] Invalid gain: $arg1"
                 fi
@@ -510,6 +520,16 @@ main() {
                     echo "[INFO] HackRF VGA gain set to $VGA dB (applies on next tune/scan)"
                 else
                     echo "[ERROR] Invalid VGA gain: $arg1"
+                fi
+                ;;
+            samp-rate|samprate|bw|bandwidth)
+                if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?(e6)?$ ]]; then
+                    [[ "$arg1" == *e6 ]] && SAMP_RATE="$arg1" || SAMP_RATE="${arg1}e6"
+                    SR_SET=1
+                    echo "[INFO] Sample rate / bandwidth set to $SAMP_RATE (re-tuning)"
+                    [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
+                else
+                    echo "[ERROR] Invalid sample rate: $arg1 (e.g. 'samp-rate 20' or 'samp-rate 10')"
                 fi
                 ;;
             dwell)

@@ -45,21 +45,21 @@ class frame_sink(gr.sync_block):
         size = '%dx%d' % (ow, oh)
         if live:
             self._live = subprocess.Popen(
-                ['ffplay', '-hide_banner', '-loglevel', 'error', '-autoexit',
+                ['ffplay', '-hide_banner', '-loglevel', 'error', '-nostats', '-autoexit',
                  '-fflags', 'nobuffer', '-flags', 'low_delay',
                  '-f', 'rawvideo', '-pixel_format', 'gray', '-video_size', size,
                  '-framerate', '30', '-window_title', title,
                  '-x', str(ow * 2), '-y', str(oh * 2), '-i', '-'],
-                stdin=subprocess.PIPE)
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
             sys.stderr.write("[fpv] live window (ffplay)\n")
             self._writer = threading.Thread(target=self._live_writer, daemon=True)
             self._writer.start()
         if record_path:
             self._rec = subprocess.Popen(
-                ['ffmpeg', '-y', '-loglevel', 'error',
+                ['ffmpeg', '-y', '-loglevel', 'error', '-nostats',
                  '-f', 'rawvideo', '-pix_fmt', 'gray', '-s', size,
                  '-r', str(record_fps), '-i', '-', '-pix_fmt', 'yuv420p', record_path],
-                stdin=subprocess.PIPE)
+                stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
             sys.stderr.write("[fpv] recording to %s\n" % record_path)
 
     def _live_writer(self):
