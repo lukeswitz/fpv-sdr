@@ -1,6 +1,6 @@
 <div align="center">
 
-<img width="300" alt="edited-photo-4" src="https://github.com/user-attachments/assets/4ed632ec-ba41-429c-a893-c17e84f74164" />
+## `fpv-sdr`
 
 
 Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in many drones and FPV cameras) with common software-defined radios. **Runs on Linux, macOS, and Windows.**
@@ -11,7 +11,7 @@ Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in 
 
 ## What you need
 
-- A [supported SDR](#supported-radios) that reaches 5.8 GHz
+- A [supported SDR](#supported-radios): HackRF, BladeRF, B210/200mini, ANT E200, ADALM-Pluto
 - Linux/Widows/macOS machine
 
 
@@ -29,7 +29,7 @@ cd fpv-sdr
 - **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 
-> [!TIP]
+
 > **Updating:** `git pull`, then restart the scanner— no rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
 
 ### Windows
