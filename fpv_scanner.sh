@@ -88,8 +88,8 @@ CURRENT_CHANNEL=""
 resolve_gain() {
     if [[ -z "$GAIN" ]]; then
         case "$SDR" in
-            hackrf)  GAIN=32 ;;
-            bladerf) GAIN=20 ;;
+            hackrf)  GAIN=36 ;;
+            bladerf) GAIN=16 ;;
             *)       GAIN=30 ;;
         esac
     fi
@@ -98,16 +98,21 @@ resolve_gain() {
 resolve_speed() {
     if [[ -z "$DSR_SET" ]]; then
         case "$SDR" in
-            hackrf) DETECT_SAMP_RATE=20e6 ;;
-            *)      DETECT_SAMP_RATE=40e6 ;;
+            hackrf)                                       DETECT_SAMP_RATE=20e6 ;;
+            pluto)                                        DETECT_SAMP_RATE=8e6 ;;
+            cariboulite)                                  DETECT_SAMP_RATE=4e6 ;;
+            bladerf|uhd|antsdr|usrp|b200|b210|b200mini)   DETECT_SAMP_RATE=40e6 ;;
+            *)                                            DETECT_SAMP_RATE=10e6 ;;
         esac
     fi
     if [[ -z "$SR_SET" ]]; then
         case "$SDR" in
-            hackrf)  SAMP_RATE=12e6 ;;
-            pluto)   SAMP_RATE=6e6 ;;
-            bladerf) SAMP_RATE=16e6 ;;
-            *)       SAMP_RATE=20e6 ;;
+            hackrf)                              SAMP_RATE=12e6 ;;
+            pluto)                               SAMP_RATE=8e6 ;;
+            cariboulite)                         SAMP_RATE=4e6 ;;
+            bladerf)                             SAMP_RATE=18e6 ;;
+            uhd|antsdr|usrp|b200|b210|b200mini)  SAMP_RATE=20e6 ;;
+            *)                                   SAMP_RATE=8e6 ;;
         esac
     fi
     if [[ -z "$SETTLE_SET" ]]; then

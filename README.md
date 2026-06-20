@@ -29,6 +29,9 @@ cd fpv-sdr
 - **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 
+> [!TIP]
+> **Updating:** `git pull`, then restart the scanner— no rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
+
 ### Windows
 The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 ```powershell
@@ -53,7 +56,8 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
 | `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
-| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain |
+| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 36; `gain` sets both LNA+VGA) |
+| `samp-rate <Msps>` | capture bandwidth — auto per SDR; raise/lower if needed (`samp-rate 14`) |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
 | `standard <ntsc\|pal>` (or `pal` / `ntsc`) | switch video standard — `pal` = 625/50, 360×288 (EU cameras); default `ntsc` |
@@ -81,9 +85,24 @@ live from the same terminal with the arrow keys:
 - **← / →** — horizontal hold (centre the picture)
 - **r** reset · **q** back to the scanner menu
 
-The terminal shows the live `V` / `H` offset and a `lock` meter (≈0 on noise, rises
-on a real video signal — so you can tell you're synced to an actual picture, not snow).
-PAL often locks better at `--samp-rate 18e6`.
+The terminal shows the live `V` / `H` offset and a `lock` meter (0–100%; 0 = noise,
+~100% = real synced picture). This is a *hold* (it repositions a split/offset frame) —
+not needed once the picture sits right.
+
+### Common adjustments — type these at the `>` prompt
+
+| If you see… | Type this |
+|-------------|-----------|
+| weak / grainy picture, black flicker at the top | `lna 36` then `gain 40` (more sensitivity) |
+| washed-out / too bright | `gain 16` (less gain) |
+| choppy video or `OsO` text spamming | `samp-rate 10` (lower bandwidth so the PC keeps up) |
+| sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |
+| a known channel isn't being found | `margin 8` (detect weaker signals) |
+| picture too dark / too washed | `contrast 0.9` (brighter) or `contrast 0.6` (flatter) |
+| PAL camera | `pal` |
+| frame split by a black bar | hold **↓** until the bar rolls off the bottom |
+
+Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 12`); the commands above just override them.
 
 ## Channels
 64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
@@ -97,8 +116,11 @@ PAL often locks better at `--samp-rate 18e6`.
 | USRP B210 / B200mini | `uhd` | |
 | BladeRF 2.0 micro | `bladerf` | needs its FPGA image (setup loads it) |
 | HackRF One | `hackrf` | 8-bit — _fine_ for FM video, slower fps than the rest|
-| ADALM-Pluto | `pluto` | SoapySDR (SoapyPlutoSDR); needs the 5.8 GHz firmware mod, and USB 2.0 caps sustained bandwidth |
+| ADALM-Pluto | `pluto` | SoapySDR; needs the 5.8 GHz firmware mod; USB 2.0 caps it to ~8 Msps |
+| CaribouLite | `cariboulite` | SoapySDR; reaches 5.8 but only 2.5 MHz BW — too narrow for a usable picture |
 | LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
+
+> Capture bandwidth is set automatically per radio (HackRF 12, bladeRF 18, ANTSDR/USRP 20, Pluto 8 Msps); override with `samp-rate <Msps>`.
 
 > [!IMPORTANT]
 > Ensure the gain settings are correct for your device before running. Keep that hackRF amp off ;)
@@ -108,7 +130,9 @@ PAL often locks better at `--samp-rate 18e6`.
 - **A known transmitter is ignored** — lower `margin 10`; or if the level sits near −10…−20 dBFS the
   gain is too high (`gain 16`).
 - **Signal found but no window** — `export DISPLAY=:0`.
-- **Window opens but picture rolls / looks like snow** — sync isn't locked. Run the viewer in the foreground and use the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)); watch the `lock` meter to confirm a real signal. PAL often needs `--samp-rate 18e6`.
+- **Black flicker at the top of the frame** — weak signal; `lna 36`, a better 5.8 antenna, or move closer.
+- **Choppy video or `OsO` text spamming the terminal** — the PC can't keep up at that rate; `samp-rate 10`.
+- **Picture split or rolling** — hold it with the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)); `lock` near 100% confirms a real signal.
 - **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
 - **BladeRF finds nothing** — its FPGA image must be loaded each power-on; `./setup.sh --check` reports it. Use a USB 3.0 port.
 
