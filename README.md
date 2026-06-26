@@ -61,6 +61,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
 | `standard <ntsc\|pal>` (or `pal` / `ntsc`) | switch video standard — `pal` = 625/50, 360×288 (EU cameras); default `ntsc` |
+| `band <58\|12>` | scan band: 5.x GHz (default) or 1.2/1.3 GHz long-range — fit the matching antenna |
 | `list` / `log` / `stop` / `quit` | channels / history / stop / exit |
 
 
@@ -101,12 +102,21 @@ not needed once the picture sits right.
 | picture too dark / too washed | `contrast 0.9` (brighter) or `contrast 0.6` (flatter) |
 | PAL camera | `pal` |
 | frame split by a black bar | hold **↓** until the bar rolls off the bottom |
+| flat / washed-out picture on 1.2 GHz | `contrast 2.5` (1.2 GHz uses ~¼ the FM deviation of 5.8 GHz, so the demod output is weaker — raise contrast) |
 
 Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 12`); the commands above just override them.
 
 ## Channels
 64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
 **Type `list` to see them all.**
+
+`scan`/`sweep`/`spectrum` cover the 5.x GHz bands by default. Type **`band 12`** to point them at
+1.2/1.3 GHz (and `band 58` to switch back) — these use a different, physically larger antenna, so
+they aren't scanned together. 1.2/1.3 GHz has **no standard channel grid** (transmitters sit anywhere
+from 1010–1360 MHz), so `band 12` runs a **gapless sweep** of the whole range rather than fixed
+channels — nothing slips through the gaps. To watch one frequency, use `freq 1280` (the popular US
+channels are 1258 and 1280 MHz).
+1.2/1.3 GHz is licence-restricted in most countries (US: ham licence; illegal in much of the EU/UK).
 
 ## Supported radios
 

@@ -68,7 +68,9 @@ declare -A CHANNELS=(
     ["L5"]=5510 ["L6"]=5547 ["L7"]=5584 ["L8"]=5621
 )
 
-SCAN_ORDER=(
+# Scan groups by antenna/band — 1.2 GHz needs its own antenna, so it is not
+# mixed into the default 5.x sweep. Switch with the `band` command.
+BAND_5X=(
     R1 R2 R3 R4 R5 R6 R7 R8
     A1 A2 A3 A4 A5 A6 A7 A8
     F1 F2 F3 F4 F5 F6 F7 F8
@@ -77,6 +79,22 @@ SCAN_ORDER=(
     D1 D2 D3 D4 D5 D6 D7 D8
     L1 L2 L3 L4 L5 L6 L7 L8
 )
+SCAN_ORDER=( "${BAND_5X[@]}" )
+
+# 1.2/1.3 GHz has NO standard channel grid (gear is tuned all over 1010-1360 MHz),
+# so scanning fixed spot channels would miss a VTX sitting between them. Build a
+# gapless sweep instead: points 7 MHz apart overlap the detector's 10 MHz in-band
+# window, so nothing slips through (same intent as fpv-viewer-rs build_scan_hops,
+# which sweeps the range rather than naming channels). chunk_plan in the detector
+# batches these into a handful of retunes. Returns names into SCAN_ORDER + CHANNELS.
+band12_sweep() {
+    local f
+    SCAN_ORDER=()
+    for (( f = 1010; f <= 1360; f += 7 )); do
+        CHANNELS["S$f"]=$f
+        SCAN_ORDER+=("S$f")
+    done
+}
 
 TB_INSTANCE=""
 DETECT_PID=""
@@ -412,6 +430,7 @@ show_menu() {
         "set <CH>"        "tune + view a channel (e.g. set R6)" \
         "freq <MHz>"      "tune + view a frequency (e.g. freq 5843)" \
         "list"            "list all channels" \
+        "band <58|12>"    "scan band: 5.x GHz (def) or 1.2/1.3 GHz" \
         "sdr <NAME>"      "switch radio (uhd|hackrf|bladerf)" \
         "gain <dB>"       "RX gain (HackRF drives LNA+VGA)" \
         "lna <dB>"        "HackRF LNA 0-40, optional override" \
@@ -438,6 +457,7 @@ list_channels() {
     echo "ImmersionRC: IMD1-IMD6 (5658-5843 MHz)"
     echo "DJI:        D1-D8 (5660-5914 MHz)"
     echo "Low Band:   L1-L8 (5362-5621 MHz)"
+    echo "1.2/1.3GHz: 1010-1360 MHz (no fixed channels) — 'band 12' sweeps it; 'freq 1280' tunes one. Needs a 1.2 GHz antenna."
 }
 
 main() {
@@ -491,6 +511,17 @@ main() {
                 fi
                 ;;
             list) list_channels ;;
+            band)
+                case "$arg1" in
+                    12|13|1.2|1.3)
+                        stop_scan; band12_sweep
+                        echo "[INFO] Scan band → 1.2/1.3 GHz gapless sweep 1010-1360 MHz (${#SCAN_ORDER[@]} steps). Fit a 1.2 GHz antenna." ;;
+                    58|5.8|5|"")
+                        stop_scan; SCAN_ORDER=( "${BAND_5X[@]}" )
+                        echo "[INFO] Scan band → 5.x GHz (default, ${#BAND_5X[@]} channels)." ;;
+                    *) echo "[ERROR] Unknown band: $arg1 (use '58' or '12')" ;;
+                esac
+                ;;
             sdr)
                 if [[ -n "$arg1" ]]; then
                     stop_scan
