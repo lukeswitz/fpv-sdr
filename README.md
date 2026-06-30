@@ -1,12 +1,25 @@
 <div align="center">
 
-## `fpv-sdr`
+<img width="320" alt="fpv-sdr" src="https://github.com/user-attachments/assets/93b07877-7645-4147-af02-5f316be1cab2" />
+
 
 
 Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in many drones and FPV cameras) with common software-defined radios. **Runs on Linux, macOS, and Windows.**
 
 </div>
 
+
+- [What you need](#what-you-need)
+- [Install](#install)
+- [Run](#run)
+  - [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)
+  - [Common adjustments](#common-adjustments--type-these-at-the--prompt)
+- [Channels](#channels)
+- [Supported radios](#supported-radios)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
+- [Legal & Acceptable Use](#legal--acceptable-use)
+  
 ---
 
 ## What you need
@@ -140,3 +153,26 @@ Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 12`); the comm
 For lawful reception of 5.8 GHz FPV video only — you are responsible for the rules in your
 jurisdiction. Provided **as is**, no warranty. The bundled NTSC decoder
 ([gr-ntsc-rc](https://github.com/lscardoso/gr-ntsc-rc), in `vendor/`) is GPLv3; the rest is MIT. Author assumes no liability for anything this code does.
+
+## Legal & Acceptable Use
+
+`fpv-sdr` is provided for lawful, educational, and authorized-testing purposes
+only — e.g. receiving signals you own, operate, or have explicit permission to
+receive.
+
+You are solely responsible for ensuring your use complies with all applicable
+laws, which may include radio-interception, wiretap, privacy, and aviation
+statutes. In the United States these may include the Electronic Communications
+Privacy Act (18 U.S.C. § 2511) and the Communications Act (47 U.S.C. § 605);
+other jurisdictions impose their own rules. Intercepting, decoding, recording,
+or divulging communications you are not authorized to receive may be a criminal
+offense.
+
+This project does not endorse or support using the software to intercept,
+monitor, or interfere with systems operated by third parties — including
+government, law enforcement, commercial, or private operators — without their
+authorization. Requests for help doing so will be declined.
+
+The software is provided "as is," without warranty of any kind. The authors
+accept no liability for misuse. This notice is not legal advice; consult a
+qualified attorney in your jurisdiction.
