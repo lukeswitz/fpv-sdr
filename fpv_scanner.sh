@@ -30,7 +30,7 @@ ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
 RECORD="${FPV_RECORD:-}"
 STANDARD="${FPV_STANDARD:-ntsc}"
-AGC="${FPV_AGC:-}"
+AGC="${FPV_AGC:-1}"
 AGC_TARGET="${FPV_AGC_TARGET:--20}"
 
 while [[ $# -gt 0 ]]; do
@@ -624,15 +624,19 @@ main() {
                 fi
                 ;;
             agc)
+                local agc_changed=""
                 case "$arg1" in
-                    on|ON|1)  AGC=1; echo "[INFO] AGC on, target ${AGC_TARGET} dBFS (applies on next tune)" ;;
-                    off|OFF|0|"") AGC=""; echo "[INFO] AGC off, gain fixed at ${GAIN} (applies on next tune)" ;;
-                    -*|[0-9]*)
-                        AGC=1; AGC_TARGET="$arg1"
+                    on|ON|1)  AGC=1; agc_changed=1
                         echo "[INFO] AGC on, target ${AGC_TARGET} dBFS (applies on next tune)" ;;
-                    *) echo "[ERROR] usage: agc on | agc off | agc <target dBFS>"; return ;;
+                    off|OFF|0) AGC=""; agc_changed=1
+                        echo "[INFO] AGC off, gain fixed at ${GAIN} (applies on next tune)" ;;
+                    "") echo "[INFO] AGC is $([[ -n "$AGC" ]] && echo "on @ ${AGC_TARGET} dBFS" || echo "off, gain fixed at ${GAIN}")" ;;
+                    -*|[0-9]*)
+                        AGC=1; AGC_TARGET="$arg1"; agc_changed=1
+                        echo "[INFO] AGC on, target ${AGC_TARGET} dBFS (applies on next tune)" ;;
+                    *) echo "[ERROR] usage: agc on | agc off | agc <target dBFS>" ;;
                 esac
-                [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
+                [[ -n "$agc_changed" && -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
                 ;;
             contrast)
                 if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
