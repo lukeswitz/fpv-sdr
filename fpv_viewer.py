@@ -338,7 +338,8 @@ def main():
     ap = argparse.ArgumentParser(description="Gated FPV video viewer (one channel)")
     ap.add_argument('--sdr', default='uhd')
     ap.add_argument('--samp-rate', type=float, default=20e6)
-    ap.add_argument('--gain', type=float, default=40.0)
+    ap.add_argument('--gain', type=float, default=24.0,
+                    help='RX gain; sets both LNA and VGA on HackRF unless --lna/--vga are given')
     ap.add_argument('--lna', type=float, default=None,
                     help='hackrf LNA (IF) gain dB 0-40 (default 24)')
     ap.add_argument('--vga', type=float, default=None,
