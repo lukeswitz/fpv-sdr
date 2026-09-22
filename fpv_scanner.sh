@@ -6,7 +6,8 @@ VIEWER_PY="$PROJECT_DIR/fpv_viewer.py"
 SCAN_LOG="$PROJECT_DIR/scan_log.txt"
 PYTHON="${FPV_PYTHON:-python3}"
 
-SDR="${FPV_SDR:-uhd}"
+SDR="${FPV_SDR:-}"
+SDR_SET=""; [[ -n "$SDR" ]] && SDR_SET=1
 GAIN="${FPV_GAIN:-}"
 GAIN_SET=""; [[ -n "$FPV_GAIN" ]] && GAIN_SET=1
 LNA="${FPV_LNA:-}"
@@ -34,7 +35,7 @@ AGC_TARGET="${FPV_AGC_TARGET:--20}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --sdr) SDR="$2"; shift 2 ;;
+        --sdr) SDR="$2"; SDR_SET=1; shift 2 ;;
         --gain) GAIN="$2"; GAIN_SET=1; shift 2 ;;
         --lna) LNA="$2"; shift 2 ;;
         --vga) VGA="$2"; shift 2 ;;
@@ -105,10 +106,25 @@ SCAN_LOOP_ABORT=0
 CURRENT_FREQ=""
 CURRENT_CHANNEL=""
 
+resolve_sdr() {
+    [[ -n "$SDR_SET" ]] && return 0
+    local found
+    found=$("$PYTHON" "$PROJECT_DIR/fpv_sdr.py" --list 2>/dev/null | tr '\n' ' ')
+    SDR=$("$PYTHON" "$PROJECT_DIR/fpv_sdr.py" 2>/dev/null)
+    if [[ -z "$SDR" ]]; then
+        SDR=uhd
+        echo "[WARN] could not probe for a radio — assuming $SDR (override with --sdr)"
+    elif [[ -z "${found// /}" ]]; then
+        echo "[WARN] no radio found — assuming $SDR (plug one in, or override with --sdr)"
+    else
+        echo "[INFO] detected radio: $SDR (attached:${found% })"
+    fi
+}
+
 resolve_gain() {
     if [[ -z "$GAIN" ]]; then
         case "$SDR" in
-            hackrf)  GAIN=36 ;;
+            hackrf)  GAIN=24 ;;
             bladerf) GAIN=16 ;;
             *)       GAIN=30 ;;
         esac
@@ -475,6 +491,7 @@ main() {
         resolve_fpv_python || { echo "[ERROR] No Python with GNU Radio bindings; set FPV_PYTHON"; exit 1; }
     fi
 
+    resolve_sdr
     resolve_gain
     resolve_speed
     echo "[INFO] FPV Scanner initialized (SDR: $SDR, gain: $GAIN${LNA:+ LNA:$LNA}${VGA:+ VGA:$VGA}, samp_rate: $SAMP_RATE)"

@@ -9,6 +9,44 @@ UHD_ALIASES = ('uhd', 'antsdr', 'usrp', 'b200', 'b210', 'b200mini')
 
 SOAPY_DRIVERS = {'pluto': 'plutosdr'}
 
+# soapy driver -> our name, best first; radios that cannot reach 5.8 GHz are absent
+DETECT_ORDER = (('uhd', 'uhd'), ('bladerf', 'bladerf'), ('hackrf', 'hackrf'),
+                ('plutosdr', 'pluto'), ('cariboulite', 'cariboulite'))
+
+
+def list_sdrs():
+    """Drivers of every attached radio. Import/enumeration failures mean that
+    backend is unusable here, which is the same as finding nothing through it."""
+    import subprocess
+    found = []
+    try:
+        import SoapySDR
+        for d in SoapySDR.Device.enumerate():
+            drv = dict(d).get('driver', '')
+            if drv:
+                found.append(drv)
+    except ImportError:
+        pass
+    except RuntimeError as e:
+        sys.stderr.write("[fpv] SoapySDR enumeration failed: %s\n" % e)
+    if 'uhd' not in found:
+        try:
+            out = subprocess.run(['uhd_find_devices'], capture_output=True,
+                                 timeout=15).stdout.decode('utf-8', 'replace')
+            if 'type:' in out or 'serial' in out:
+                found.append('uhd')
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+    return found
+
+
+def detect_sdr(default='uhd'):
+    found = list_sdrs()
+    for drv, name in DETECT_ORDER:
+        if drv in found:
+            return name
+    return default
+
 
 def _build_uhd(samp_rate, center_freq, gain, dev_args, antenna):
     from gnuradio import uhd
@@ -82,3 +120,11 @@ def build_source(samp_rate, center_freq, gain, sdr='uhd', dev_args='', antenna=N
 
 def quad_demod_gain(samp_rate):
     return samp_rate / (2 * math.pi * 850000000 / 8.0)
+
+
+if __name__ == '__main__':
+    if '--list' in sys.argv:
+        for d in list_sdrs():
+            print(d)
+    else:
+        print(detect_sdr())
