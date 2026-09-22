@@ -29,6 +29,8 @@ ANTENNA="${FPV_ANTENNA:-}"
 VIEW_EXTRA="${FPV_VIEW_EXTRA:-}"
 RECORD="${FPV_RECORD:-}"
 STANDARD="${FPV_STANDARD:-ntsc}"
+AGC="${FPV_AGC:-}"
+AGC_TARGET="${FPV_AGC_TARGET:--20}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -183,6 +185,7 @@ set_frequency() {
         --sdr "$SDR" --freq "${freq_mhz}e6" --gain "$GAIN" --samp-rate "$SAMP_RATE" \
         ${LNA:+--lna "$LNA"} ${VGA:+--vga "$VGA"} ${AMP:+--amp} \
         --rotate "$ROTATE" --contrast "$CONTRAST" --standard "$STANDARD" \
+        ${AGC:+--agc --agc-target "$AGC_TARGET"} \
         ${DEV_ARGS:+--dev-args "$DEV_ARGS"} \
         ${ANTENNA:+--antenna "$ANTENNA"} \
         ${RECORD:+--record "$RECORD"} \
@@ -440,6 +443,7 @@ show_menu() {
         "record <file>"   "record video; bare 'record' = off" \
         "rotate <deg>"    "0|90|180|270 (def ${ROTATE})" \
         "contrast <x>"    "demod contrast (def ${CONTRAST})" \
+        "agc <on|off|dBFS>" "auto RX gain (now: $([[ -n "$AGC" ]] && echo "on @ ${AGC_TARGET} dBFS" || echo off))" \
         "samp-rate <Msps>" "capture bandwidth, e.g. 20 or 10 (now ${SAMP_RATE})" \
         "standard <std>"  "video standard ntsc|pal (def ${STANDARD})" \
         "log"             "show scan log" \
@@ -601,6 +605,17 @@ main() {
                 else
                     echo "[ERROR] rotate must be 0, 90, 180 or 270"
                 fi
+                ;;
+            agc)
+                case "$arg1" in
+                    on|ON|1)  AGC=1; echo "[INFO] AGC on, target ${AGC_TARGET} dBFS (applies on next tune)" ;;
+                    off|OFF|0|"") AGC=""; echo "[INFO] AGC off, gain fixed at ${GAIN} (applies on next tune)" ;;
+                    -*|[0-9]*)
+                        AGC=1; AGC_TARGET="$arg1"
+                        echo "[INFO] AGC on, target ${AGC_TARGET} dBFS (applies on next tune)" ;;
+                    *) echo "[ERROR] usage: agc on | agc off | agc <target dBFS>"; return ;;
+                esac
+                [[ -n "$CURRENT_CHANNEL" ]] && set_frequency "$CURRENT_FREQ" "$CURRENT_CHANNEL"
                 ;;
             contrast)
                 if [[ "$arg1" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then

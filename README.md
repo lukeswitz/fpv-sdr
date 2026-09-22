@@ -71,7 +71,8 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
 | `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
-| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 24; `gain` sets both LNA+VGA) |
+| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 36; `gain` sets both LNA+VGA) |
+| `agc <on\|off\|dBFS>` | auto RX gain — tracks LNA/VGA to hold the ADC level (default off, target −20 dBFS) |
 | `samp-rate <Msps>` | capture bandwidth — auto per SDR; raise/lower if needed (`samp-rate 14`) |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
@@ -110,6 +111,7 @@ not needed once the picture sits right.
 | If you see… | Type this |
 |-------------|-----------|
 | weak / grainy picture, black flicker at the top | `gain 40` (more sensitivity, for a distant transmitter) |
+| signal level keeps drifting as you move around | `agc on` — tracks LNA/VGA instead of holding one fixed gain |
 | picture tears into sideways-shifted bands | noise is false-triggering the line sync — try `gain 32` first if the transmitter is close, `gain 40` if it is far |
 | choppy video or `OsO` text spamming | `samp-rate 12` (lower bandwidth so the PC keeps up) |
 | sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |

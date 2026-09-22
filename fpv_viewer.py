@@ -4,6 +4,7 @@
 
 import os
 import sys
+import math
 import time
 import shutil
 import signal
@@ -42,12 +43,18 @@ def level_offset(contrast, sync_mid=SYNC_MID):
     return SYNC_THRESHOLD - sync_mid * contrast
 
 
+def split_gain(total, lna_max=32.0):
+    lna = max(0.0, min(float(lna_max), float(int(total) // 8 * 8)))
+    vga = max(0.0, min(62.0, round((float(total) - lna) / 2.0) * 2.0))
+    return lna, vga
+
+
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
                  rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False,
                  standard='ntsc', display='auto', video_offset=None, video_bw=1.25e6,
-                 sync_mid=SYNC_MID):
+                 sync_mid=SYNC_MID, agc=False, agc_target=-20.0, agc_lna_max=32.0):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -112,6 +119,28 @@ class viewer(gr.top_block):
         self.connect((self.NTSC_decoder_c_0, 0), self.lock_state,
                      self.lock_abs, self.lock_keep, self.lock_avg, self.lock_probe)
 
+        self.agc = bool(agc)
+        self.agc_target = float(agc_target)
+        self.agc_lna_max = float(agc_lna_max)
+        self.agc_total = float(gain if lna is None else lna) + float(gain if vga is None else vga)
+        self._agc_next = 0.0
+        if self.agc:
+            l0, v0 = split_gain(self.agc_total, self.agc_lna_max)
+            self.agc_total = l0 + v0
+            try:
+                self.src.set_gain(0, 'LNA', l0)
+                self.src.set_gain(0, 'VGA', v0)
+            except (AttributeError, RuntimeError):
+                self.agc = False
+        lvl_dec = max(1, int(cap_rate / 100e3))
+        self.lvl_mag = blocks.complex_to_mag_squared(1)
+        self.lvl_keep = blocks.keep_one_in_n(gr.sizeof_float, lvl_dec)
+        lvl_win = max(1, int(cap_rate * 0.05) // lvl_dec)
+        self.lvl_avg = blocks.moving_average_ff(lvl_win, 1.0 / lvl_win, 4000, 1)
+        self.lvl_probe = blocks.probe_signal_f()
+        self.connect((self.src, 0), self.lvl_mag, self.lvl_keep,
+                     self.lvl_avg, self.lvl_probe)
+
         self.recorder = None
         self.frame_sink_0 = None
         display = str(display).lower()
@@ -164,6 +193,34 @@ class viewer(gr.top_block):
 
     def sync_status(self):
         return self.v_lines, self.h_px
+
+    def rf_dbfs(self):
+        p = self.lvl_probe.level()
+        return 10.0 * math.log10(p) if p > 1e-12 else -120.0
+
+    def update_agc(self):
+        rms = self.rf_dbfs()
+        now = time.monotonic()
+        if not self.agc or now < self._agc_next or rms <= -119.0:
+            return rms
+        self._agc_next = now + 0.4
+        err = self.agc_target - rms
+        if abs(err) < 1.0:
+            return rms
+        total = max(0.0, min(102.0, self.agc_total + max(-10.0, min(10.0, err))))
+        lna, vga = split_gain(total, self.agc_lna_max)
+        if (lna, vga) != self.agc_gains():
+            try:
+                self.src.set_gain(0, 'LNA', lna)
+                self.src.set_gain(0, 'VGA', vga)
+            except (AttributeError, RuntimeError):
+                self.agc = False
+                return rms
+        self.agc_total = total
+        return rms
+
+    def agc_gains(self):
+        return split_gain(self.agc_total, self.agc_lna_max)
 
     def lock_metric(self):
         return self.lock_probe.level()
@@ -242,14 +299,18 @@ def run_sync_tuner(tb):
                     elif key in ('q', 'Q', '\x03'):
                         return
             v, h = tb.sync_status()
+            rms = tb.update_agc()
             try:
                 errlog.seek(0)
                 ovf = errlog.read().count(b'sO')
             except OSError:
                 ovf = 0
+            lna, vga = tb.agc_gains()
+            agc = "   rf:%+.0fdBFS%s lna:%d vga:%d" % (
+                rms, " agc" if tb.agc else "", lna, vga)
             sys.stdout.write(
-                "\r[sync] V:%+4d lines  H:%+4d px   lock:%3d%%   ovf:%d\x1b[K" %
-                (v, h, tb.lock_pct(), ovf))
+                "\r[sync] V:%+4d lines  H:%+4d px   lock:%3d%%   ovf:%d%s\x1b[K" %
+                (v, h, tb.lock_pct(), ovf, agc))
             sys.stdout.flush()
     finally:
         sys.stderr.flush()
@@ -305,6 +366,14 @@ def main():
                     help='live video backend: auto/sdl = gr-video-sdl with a software YUV '
                          'overlay, sdl-hw = SDL hardware (Xv) overlay, ffplay = pipe raw '
                          'frames to ffplay (use when the SDL window stays blank)')
+    ap.add_argument('--agc', action='store_true',
+                    help='track RX gain to hold the ADC level at --agc-target; the HackRF has '
+                         'no hardware AGC, this steps LNA (8 dB) and VGA (2 dB) in software')
+    ap.add_argument('--agc-target', type=float, default=-20.0,
+                    help='RMS level in dBFS the AGC aims for')
+    ap.add_argument('--agc-lna-max', type=float, default=32.0,
+                    help='ceiling on LNA so the AGC adds level with VGA instead of driving '
+                         'the RF front end into compression')
     ap.add_argument('--no-keys', action='store_true',
                     help='disable the interactive arrow-key vertical/horizontal sync tuner')
     args = ap.parse_args()
@@ -324,7 +393,8 @@ def main():
                 lna=args.lna, vga=args.vga, amp=args.amp,
                 standard=args.standard, display=args.display,
                 video_offset=args.video_offset, video_bw=args.video_bw,
-                sync_mid=args.sync_mid)
+                sync_mid=args.sync_mid, agc=args.agc, agc_target=args.agc_target,
+                agc_lna_max=args.agc_lna_max)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()
@@ -341,6 +411,7 @@ def main():
         else:
             while not tb.window_closed():
                 time.sleep(0.2)
+                tb.update_agc()
     except (EOFError, KeyboardInterrupt):
         pass
 
