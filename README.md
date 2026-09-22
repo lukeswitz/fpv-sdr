@@ -72,7 +72,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
 | `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
 | `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 36; `gain` sets both LNA+VGA) |
-| `agc <on\|off\|dBFS>` | auto RX gain — tracks LNA/VGA to hold the ADC level (default off, target −20 dBFS) |
+| `agc <on\|off\|dBFS>` | auto RX gain — tracks LNA/VGA to hold the ADC level (**on by default**, target −20 dBFS; `agc off` pins a fixed gain) |
 | `samp-rate <Msps>` | capture bandwidth — auto per SDR; raise/lower if needed (`samp-rate 14`) |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
@@ -113,7 +113,7 @@ not needed once the picture sits right.
 | weak / grainy picture, black flicker at the top | `gain 40` (more sensitivity, for a distant transmitter) |
 | signal level keeps drifting as you move around | `agc on` — tracks LNA/VGA instead of holding one fixed gain |
 | vertical line or smear down the middle of the picture | `export FPV_VIEW_EXTRA="--if-offset 3e6"` — moves the receiver's DC spike off the carrier |
-| picture tears into sideways-shifted bands | noise is false-triggering the line sync — try `gain 32` first if the transmitter is close, `gain 40` if it is far |
+| picture tears into sideways-shifted bands | noise is false-triggering the line sync — leave `agc on`, or try a better antenna / shorter range |
 | choppy video or `OsO` text spamming | `samp-rate 12` (lower bandwidth so the PC keeps up) |
 | sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |
 | a known channel isn't being found | `margin 8` (detect weaker signals) |
@@ -123,7 +123,12 @@ not needed once the picture sits right.
 | frame split by a black bar | hold **↓** until the bar rolls off the bottom |
 | flat / washed-out picture on 1.2 GHz | `contrast 4` (1.2 GHz uses ~¼ the FM deviation of 5.8 GHz, so the demod output is weaker — raise contrast) |
 
-Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 14`); the commands above just override them.
+The radio is detected at startup, and its defaults set from that (HackRF: `samp-rate 14`, fixed gain 24
+when AGC is off); the commands above just override them. `--sdr <name>` or `FPV_SDR` skips detection.
+
+RX gain is tracked automatically, because the best fixed gain depends on how far away the transmitter
+is: measured on one HackRF, a transmitter at 1 ft locked best at LNA/VGA 24/24 and clipped at 32/32,
+while the same transmitter at 5 ft locked best at 32/32. `agc off` pins a fixed gain if you want one.
 
 `contrast` scales the demodulated composite onto the levels the decoder expects
 (`BLACK_LEVEL -0.02`, `WHITE_LEVEL 0.06` in `vendor/gr-ntsc-rc/lib/NTSC_configuration.h`). The DC

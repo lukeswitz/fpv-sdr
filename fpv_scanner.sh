@@ -47,6 +47,7 @@ while [[ $# -gt 0 ]]; do
         --standard) STANDARD="$2"; shift 2 ;;
         -h|--help)
             echo "Usage: $0 [--sdr uhd|hackrf|bladerf] [--gain N] [--lna N] [--vga N] [--amp] [--samp-rate HZ] [--margin dB] [--dev-args STR] [--antenna NAME] [--standard ntsc|pal]"
+            echo "       the radio is detected automatically; --sdr overrides it"
             exit 0 ;;
         *) echo "[WARN] unknown arg: $1"; shift ;;
     esac
