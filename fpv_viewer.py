@@ -5,6 +5,7 @@
 import os
 import sys
 import time
+import shutil
 import signal
 import argparse
 
@@ -33,12 +34,20 @@ from fpv_display import frame_sink
 
 LOCK_FULL = 5.0
 
+SYNC_THRESHOLD = -0.020
+SYNC_MID = -0.0273
+
+
+def level_offset(contrast, sync_mid=SYNC_MID):
+    return SYNC_THRESHOLD - sync_mid * contrast
+
 
 class viewer(gr.top_block):
     def __init__(self, sdr, samp_rate, freq, gain, dev_args, antenna,
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
                  rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False,
-                 standard='ntsc'):
+                 standard='ntsc', display='auto', video_offset=None, video_bw=1.25e6,
+                 sync_mid=SYNC_MID):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -54,9 +63,10 @@ class viewer(gr.top_block):
             lna=lna, vga=vga, amp=amp)
 
         title = 'FPV-SDR %.0f MHz' % (freq / 1e6)
+        video_bw = float(video_bw)
         self.low_pass_filter_1 = filter.fir_filter_fff(
             oversample,
-            firdes.low_pass(1, cap_rate, 2e6, 2e6, window.WIN_HAMMING, 6.76))
+            firdes.low_pass(1, cap_rate, video_bw, video_bw, window.WIN_HAMMING, 6.76))
         self.analog_quadrature_demod_cf_0 = analog.quadrature_demod_cf(
             quad_demod_gain(cap_rate) * contrast)
         self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate, std_code)
@@ -64,11 +74,16 @@ class viewer(gr.top_block):
         if sdr.lower() in UHD_ALIASES or not dcblock:
             self.connect((self.src, 0), (self.analog_quadrature_demod_cf_0, 0))
         else:
-            self.dcblock = filter.dc_blocker_cc(32, True)
+            self.dcblock = filter.dc_blocker_cc(32, False)
             self.connect((self.src, 0), self.dcblock)
             self.connect(self.dcblock, (self.analog_quadrature_demod_cf_0, 0))
         self.connect((self.analog_quadrature_demod_cf_0, 0), (self.low_pass_filter_1, 0))
-        self.connect((self.low_pass_filter_1, 0), (self.NTSC_decoder_c_0, 0))
+        self.sync_mid = float(sync_mid)
+        self.video_offset = (level_offset(contrast, self.sync_mid)
+                             if video_offset is None else float(video_offset))
+        self.video_level = blocks.add_const_ff(self.video_offset)
+        self.connect((self.low_pass_filter_1, 0), self.video_level)
+        self.connect(self.video_level, (self.NTSC_decoder_c_0, 0))
 
         self.NTSC_video_stream_converter_c_0 = NTSC.video_stream_converter_c(
             samp_rate, samp_rate / (self.vid_w * self.vid_h * field_rate),
@@ -87,17 +102,24 @@ class viewer(gr.top_block):
         self.sync_delay = blocks.delay(gr.sizeof_short, self.sync_center)
         self.connect((self.NTSC_video_stream_converter_c_0, 0), (self.sync_delay, 0))
 
-        lock_win = max(1, int(samp_rate * 0.02))
+        lock_dec = max(1, int(samp_rate / 100e3))
+        lock_win = max(1, int(samp_rate * 0.02) // lock_dec)
         self.lock_state = blocks.add_const_ff(-1.0)
         self.lock_abs = blocks.abs_ff(1)
+        self.lock_keep = blocks.keep_one_in_n(gr.sizeof_float, lock_dec)
         self.lock_avg = blocks.moving_average_ff(lock_win, 1.0 / lock_win, 4000, 1)
         self.lock_probe = blocks.probe_signal_f()
         self.connect((self.NTSC_decoder_c_0, 0), self.lock_state,
-                     self.lock_abs, self.lock_avg, self.lock_probe)
+                     self.lock_abs, self.lock_keep, self.lock_avg, self.lock_probe)
 
         self.recorder = None
         self.frame_sink_0 = None
-        if HAVE_SDL:
+        display = str(display).lower()
+        if display == 'auto':
+            display = 'sdl' if (HAVE_SDL and not shutil.which('ffplay')) else 'ffplay'
+        if HAVE_SDL and live and display in ('sdl', 'sdl-hw'):
+            if display != 'sdl-hw':
+                os.environ.setdefault('SDL_VIDEO_YUV_HWACCEL', '0')
             self.video_sdl_sink_0 = video_sdl.sink_s(
                 0, self.vid_w, self.vid_h, (self.vid_w * 2), (self.vid_h * 2))
             self.connect((self.sync_delay, 0), (self.video_sdl_sink_0, 0))
@@ -106,8 +128,8 @@ class viewer(gr.top_block):
                 self.connect((self.sync_delay, 0), (self.recorder, 0))
         else:
             self.frame_sink_0 = frame_sink(
-                self.vid_w, self.vid_h, frame_out, record_path=record_path, live=live, title=title,
-                rotate=rotate)
+                self.vid_w, self.vid_h, None if live else frame_out,
+                record_path=record_path, live=live, title=title, rotate=rotate)
             self.connect((self.sync_delay, 0), (self.frame_sink_0, 0))
 
     def retune(self, freq):
@@ -116,6 +138,11 @@ class viewer(gr.top_block):
 
     def set_contrast(self, contrast):
         self.analog_quadrature_demod_cf_0.set_gain(quad_demod_gain(self.cap_rate) * contrast)
+        self.set_video_offset(level_offset(contrast, self.sync_mid))
+
+    def set_video_offset(self, offset):
+        self.video_offset = float(offset)
+        self.video_level.set_k(self.video_offset)
 
     def _apply_sync(self):
         off = self.sync_center + self.v_lines * self.line_px + self.h_px
@@ -181,9 +208,14 @@ def _parse_keys(buf):
 def run_sync_tuner(tb):
     import termios
     import select
+    import tempfile
 
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
+    errlog = tempfile.TemporaryFile()
+    saved_err = os.dup(2)
+    sys.stderr.flush()
+    os.dup2(errlog.fileno(), 2)
     sys.stderr.write(
         "[fpv] sync tuner: up/down = vertical hold, left/right = horizontal, "
         "r = reset, q = quit\n")
@@ -210,11 +242,20 @@ def run_sync_tuner(tb):
                     elif key in ('q', 'Q', '\x03'):
                         return
             v, h = tb.sync_status()
+            try:
+                errlog.seek(0)
+                ovf = errlog.read().count(b'sO')
+            except OSError:
+                ovf = 0
             sys.stdout.write(
-                "\r[sync] V:%+4d lines  H:%+4d px   lock:%3d%%\x1b[K" %
-                (v, h, tb.lock_pct()))
+                "\r[sync] V:%+4d lines  H:%+4d px   lock:%3d%%   ovf:%d\x1b[K" %
+                (v, h, tb.lock_pct(), ovf))
             sys.stdout.flush()
     finally:
+        sys.stderr.flush()
+        os.dup2(saved_err, 2)
+        os.close(saved_err)
+        errlog.close()
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         sys.stdout.write("\n")
         sys.stdout.flush()
@@ -246,11 +287,24 @@ def main():
                     help='rotate the displayed video by this many degrees')
     ap.add_argument('--oversample', type=int, default=1,
                     help='capture at oversample*samp-rate then decimate (wide demod, correct decoder timing)')
-    ap.add_argument('--contrast', type=float, default=1.0,
-                    help='multiply the quad-demod gain to match the decoder sync/black/white levels')
+    ap.add_argument('--contrast', type=float, default=1.35,
+                    help='scale the demodulated composite onto the decoder black/white window')
+    ap.add_argument('--video-offset', type=float, default=None,
+                    help='DC shift applied after --contrast; derived from --sync-mid when unset')
+    ap.add_argument('--sync-mid', type=float, default=SYNC_MID,
+                    help='demodulated level midway between back porch and sync tip at '
+                         'contrast 1.0; the offset keeps the decoder threshold there')
+    ap.add_argument('--video-bw', type=float, default=1.25e6,
+                    help='baseband low-pass cutoff feeding the decoder; gr-ntsc-rc documents '
+                         '1.25 MHz, wider passes more detail and more sync-edge noise')
     ap.add_argument('--standard', choices=('ntsc', 'pal'), default='ntsc',
                     help='analog video standard: ntsc (525/60, 360x240, default) or '
                          'pal (625/50, 360x288 — common on EU FPV cameras)')
+    ap.add_argument('--display', default=os.environ.get('FPV_DISPLAY', 'auto'),
+                    choices=('auto', 'sdl', 'sdl-hw', 'ffplay'),
+                    help='live video backend: auto/sdl = gr-video-sdl with a software YUV '
+                         'overlay, sdl-hw = SDL hardware (Xv) overlay, ffplay = pipe raw '
+                         'frames to ffplay (use when the SDL window stays blank)')
     ap.add_argument('--no-keys', action='store_true',
                     help='disable the interactive arrow-key vertical/horizontal sync tuner')
     args = ap.parse_args()
@@ -259,7 +313,7 @@ def main():
         sys.stderr.write(
             "[viewer] gnuradio.NTSC not built — the viewer needs the gr-ntsc-rc decoder.\n"
             "         Build the bundled copy:  ./setup.sh   (it builds vendor/gr-ntsc-rc)\n"
-            "         DragonOS ships it prebuilt; see the README 'Install' section.\n")
+            "         It is not part of the DragonOS SDR stack; setup.sh builds it from vendor/.\n")
         sys.exit(2)
 
     tb = viewer(args.sdr, args.samp_rate, args.freq, args.gain,
@@ -268,7 +322,9 @@ def main():
                 dcblock=(not args.no_dcblock), rotate=args.rotate,
                 oversample=args.oversample, contrast=args.contrast,
                 lna=args.lna, vga=args.vga, amp=args.amp,
-                standard=args.standard)
+                standard=args.standard, display=args.display,
+                video_offset=args.video_offset, video_bw=args.video_bw,
+                sync_mid=args.sync_mid)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()

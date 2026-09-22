@@ -34,6 +34,11 @@ run_quiet() {
     fi
 }
 
+try_quiet() {
+    local log="$1"; shift
+    "$@" >>"$log" 2>&1
+}
+
 resolve_py() {
     PYTHON=""
     if [[ -f "$PROJECT_DIR/fpv_env.sh" ]]; then
@@ -63,17 +68,16 @@ doctor() {
         fac="$(SoapySDRUtil --info 2>/dev/null | sed -n 's/.*Available factories\.\.\. //p')"
         ok "SoapySDR factories: ${fac:-none}"
         [[ "$fac" == *hackrf*  ]] || warn "  no hackrf factory  — install SoapyHackRF for HackRF"
-        if [[ "$fac" == *bladerf* ]]; then
+        [[ "$fac" == *bladerf* ]] || warn "  no bladerf factory — install SoapyBladeRF for BladeRF"
+        if SoapySDRUtil --find 2>/dev/null | grep -qi bladerf; then
             local nd="$HOME/.config/Nuand/bladeRF"
             if [[ -e "$nd/hostedxA4.rbf" || -e "$nd/hostedxA9.rbf" ]]; then
                 ok "  bladeRF FPGA image present (autoload name)"
             elif ls "$nd"/hostedxA*-latest.rbf >/dev/null 2>&1; then
                 warn "  bladeRF FPGA is named *-latest.rbf — libbladeRF won't autoload it; run setup (renames it)"
             else
-                warn "  bladeRF FPGA image MISSING — device cannot stream until it is loaded (setup fetches it)"
+                warn "  bladeRF FPGA image MISSING — device cannot stream until it is loaded"
             fi
-        else
-            warn "  no bladerf factory — install SoapyBladeRF for BladeRF"
         fi
     else
         warn "SoapySDR not found (needed for HackRF/BladeRF; UHD radios do not need it)"
@@ -132,7 +136,7 @@ build_soapy_modules_mac() {
 install_linux() {
     if ! have apt-get; then
         err "Non-apt Linux detected."
-        echo "  Install: gnuradio gnuradio-dev (gr-soapy ships inside gnuradio), soapysdr-tools,"
+        echo "  Install: gnuradio and its development headers (gr-soapy is part of gnuradio), soapysdr-tools,"
         echo "  the SoapySDR device modules (hackrf/bladerf), uhd-host, ffmpeg, cmake, g++, git,"
         echo "  python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev"
         echo "  then re-run:  ./setup.sh --check"
@@ -141,12 +145,50 @@ install_linux() {
     say "Installing GNU Radio + SDR stack via apt (sudo) — this can take a few minutes"
     need sudo apt-get update
     local log="${TMPDIR:-/tmp}/fpv-sdr-apt-install.log"; : > "$log"
-    run_quiet "$log" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        gnuradio gnuradio-dev soapysdr-tools \
-        soapysdr-module-hackrf soapysdr-module-bladerf \
-        uhd-host ffmpeg cmake g++ git pkg-config \
-        python3-numpy python3-pil python3-dev python3-pybind11 libboost-all-dev libsndfile1-dev
-    ok "apt packages installed"
+
+    resolve_py
+    local pkgs=(ffmpeg cmake g++ git pkg-config
+                python3-numpy python3-pil python3-dev python3-pybind11
+                libboost-all-dev libsndfile1-dev)
+    local fac=""
+    if have SoapySDRUtil; then
+        fac="$(SoapySDRUtil --info 2>/dev/null | sed -n 's/.*Available factories\.\.\. //p')"
+        info "SoapySDR already installed, factories: ${fac:-none}"
+        info "  DragonOS builds its own soapysdr0.8-module-* newer than the archive metapackages — asking apt for those breaks the transaction"
+    else
+        pkgs+=(soapysdr-tools)
+    fi
+    [[ "$fac" == *hackrf*  ]] || pkgs+=(soapysdr-module-hackrf)
+    [[ "$fac" == *bladerf* ]] || pkgs+=(soapysdr-module-bladerf)
+    if "$PYTHON" -c "import gnuradio.gr" 2>/dev/null; then
+        info "GNU Radio already installed — not pulling the apt build over it"
+        info "  DragonOS builds it into /usr/local and pins gnuradio-dev to -1; its cmake config is all gr-ntsc-rc needs"
+    else
+        pkgs=(gnuradio gnuradio-dev "${pkgs[@]}")
+    fi
+    if have uhd_find_devices; then
+        info "UHD already installed — skipping uhd-host"
+    else
+        pkgs+=(uhd-host)
+    fi
+
+    if try_quiet "$log" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${pkgs[@]}"; then
+        ok "apt packages installed"
+        return
+    fi
+
+    warn "bulk apt install failed — retrying one package at a time"
+    info "  a distro pin or a source-built dependency makes some of these uninstallable; that is fine as long as the preflight below passes"
+    local p failed=()
+    for p in "${pkgs[@]}"; do
+        try_quiet "$log" sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$p" || failed+=("$p")
+    done
+    if [[ ${#failed[@]} -eq 0 ]]; then
+        ok "apt packages installed"
+    else
+        warn "apt could not install: ${failed[*]}"
+        info "  log: $log"
+    fi
 }
 
 install_pydeps() {
@@ -164,7 +206,7 @@ install_pydeps() {
 build_ntsc() {
     resolve_py
     if "$PYTHON" -c "import gnuradio.NTSC as N; N.decoder_c(20e6, 1)" 2>/dev/null; then
-        ok "gr-ntsc-rc decoder present and PAL-capable — skipping build (DragonOS ships it prebuilt)"
+        ok "gr-ntsc-rc decoder present and PAL-capable — skipping build"
         return
     fi
     if "$PYTHON" -c "import gnuradio.NTSC" 2>/dev/null; then
@@ -212,7 +254,7 @@ build_ntsc() {
 }
 
 bladerf_fpga() {
-    SoapySDRUtil --info 2>/dev/null | grep -qi bladerf || return 0
+    SoapySDRUtil --find 2>/dev/null | grep -qi bladerf || return 0
     local cfg="$HOME/.config/Nuand/bladeRF"
     if [[ -e "$cfg/hostedxA4.rbf" || -e "$cfg/hostedxA9.rbf" ]]; then
         ok "bladeRF FPGA image present — libbladeRF autoloads it"
@@ -235,8 +277,11 @@ bladerf_fpga() {
     say "Fetching bladeRF FPGA bitstream ($imgs) — required, loads every power-on"
     local img
     for img in $imgs; do
-        need curl -fL "https://www.nuand.com/fpga/${img}-latest.rbf" -o "$cfg/${img}.rbf"
-        ok "$img.rbf -> $cfg"
+        if curl -fL "https://www.nuand.com/fpga/${img}-latest.rbf" -o "$cfg/${img}.rbf"; then
+            ok "$img.rbf -> $cfg"
+        else
+            warn "could not fetch $img.rbf — the bladeRF cannot stream until it is loaded"
+        fi
     done
 }
 

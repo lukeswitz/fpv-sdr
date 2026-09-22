@@ -17,7 +17,7 @@ SR_SET=""; [[ -n "$FPV_SAMP_RATE" ]] && SR_SET=1
 DETECT_SAMP_RATE="${FPV_DETECT_SAMP_RATE:-}"
 DSR_SET=""; [[ -n "$FPV_DETECT_SAMP_RATE" ]] && DSR_SET=1
 ROTATE="${FPV_ROTATE:-0}"
-CONTRAST="${FPV_CONTRAST:-0.8}"
+CONTRAST="${FPV_CONTRAST:-1.35}"
 MARGIN="${FPV_MARGIN:-12}"
 SETTLE="${FPV_SETTLE:-}"
 SETTLE_SET=""; [[ -n "$FPV_SETTLE" ]] && SETTLE_SET=1
@@ -125,7 +125,7 @@ resolve_speed() {
     fi
     if [[ -z "$SR_SET" ]]; then
         case "$SDR" in
-            hackrf)                              SAMP_RATE=12e6 ;;
+            hackrf)                              SAMP_RATE=14e6 ;;
             pluto)                               SAMP_RATE=8e6 ;;
             cariboulite)                         SAMP_RATE=4e6 ;;
             bladerf)                             SAMP_RATE=18e6 ;;

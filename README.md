@@ -38,7 +38,9 @@ cd fpv-sdr
 > [!TIP]
 > Run `./setup.sh --check` to report what's already installed
 
-- **DragonOS** — everything is prebuilt; `./setup.sh` just confirms it.
+- **DragonOS** — the SDR stack (GNU Radio, SoapySDR, UHD) is already there, built into `/usr/local`,
+  and apt is pinned so it cannot be overwritten. `./setup.sh` detects that and skips it. gr-ntsc-rc is
+  not part of that stack, so setup builds it from `vendor/`.
 - **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 
@@ -69,7 +71,7 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
 | `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
-| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 36; `gain` sets both LNA+VGA) |
+| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 24; `gain` sets both LNA+VGA) |
 | `samp-rate <Msps>` | capture bandwidth — auto per SDR; raise/lower if needed (`samp-rate 14`) |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
 | `rotate` / `contrast` / `record <file>` | adjust + capture video |
@@ -107,17 +109,24 @@ not needed once the picture sits right.
 
 | If you see… | Type this |
 |-------------|-----------|
-| weak / grainy picture, black flicker at the top | `lna 36` then `gain 40` (more sensitivity) |
-| washed-out / too bright | `gain 16` (less gain) |
-| choppy video or `OsO` text spamming | `samp-rate 10` (lower bandwidth so the PC keeps up) |
+| weak / grainy picture, black flicker at the top | `gain 40` (more sensitivity, for a distant transmitter) |
+| picture tears into sideways-shifted bands | noise is false-triggering the line sync — try `gain 32` first if the transmitter is close, `gain 40` if it is far |
+| choppy video or `OsO` text spamming | `samp-rate 12` (lower bandwidth so the PC keeps up) |
 | sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |
 | a known channel isn't being found | `margin 8` (detect weaker signals) |
-| picture too dark / too washed | `contrast 0.9` (brighter) or `contrast 0.6` (flatter) |
+| washed-out, everything mid-gray | `contrast 1.6` (more range) |
+| only part of the frame has picture, rest flat gray | `contrast 1.1` — the composite is overshooting the decoder's window |
 | PAL camera | `pal` |
 | frame split by a black bar | hold **↓** until the bar rolls off the bottom |
-| flat / washed-out picture on 1.2 GHz | `contrast 2.5` (1.2 GHz uses ~¼ the FM deviation of 5.8 GHz, so the demod output is weaker — raise contrast) |
+| flat / washed-out picture on 1.2 GHz | `contrast 4` (1.2 GHz uses ~¼ the FM deviation of 5.8 GHz, so the demod output is weaker — raise contrast) |
 
-Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 12`); the commands above just override them.
+Defaults per radio are auto-set (e.g. HackRF: gain 36, `samp-rate 14`); the commands above just override them.
+
+`contrast` scales the demodulated composite onto the levels the decoder expects
+(`BLACK_LEVEL -0.02`, `WHITE_LEVEL 0.06` in `vendor/gr-ntsc-rc/lib/NTSC_configuration.h`). The DC
+offset that keeps the back porch above the decoder's `-0.020` sync threshold is derived from
+`contrast`, so one knob moves both. The default suits a 5.8 GHz link; for a transmitter with very
+different FM deviation, measure the back-porch and sync-tip levels and pass `--sync-mid`.
 
 ## Channels
 64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
@@ -143,7 +152,7 @@ channels are 1258 and 1280 MHz).
 | CaribouLite | `cariboulite` | SoapySDR; reaches 5.8 but only 2.5 MHz BW — too narrow for a usable picture |
 | LimeSDR · RTL-SDR · Airspy · SDRplay | — | can't reach 5.8 GHz |
 
-> Capture bandwidth is set automatically per radio (HackRF 12, bladeRF 18, ANTSDR/USRP 20, Pluto 8 Msps); override with `samp-rate <Msps>`.
+> Capture bandwidth is set automatically per radio (HackRF 14, bladeRF 18, ANTSDR/USRP 20, Pluto 8 Msps); override with `samp-rate <Msps>`.
 
 > [!IMPORTANT]
 > Ensure the gain settings are correct for your device before running. Keep that hackRF amp off ;)
@@ -153,8 +162,11 @@ channels are 1258 and 1280 MHz).
 - **A known transmitter is ignored** — lower `margin 10`; or if the level sits near −10…−20 dBFS the
   gain is too high (`gain 16`).
 - **Signal found but no window** — `export DISPLAY=:0`.
-- **Black flicker at the top of the frame** — weak signal; `lna 36`, a better 5.8 antenna, or move closer.
-- **Choppy video or `OsO` text spamming the terminal** — the PC can't keep up at that rate; `samp-rate 10`.
+- **Window opens but stays blank (Linux)** — the gr-video-sdl sink renders black on some Linux
+  desktops even with SDL's software YUV overlay forced. The viewer therefore uses `ffplay` whenever
+  it is installed; `--display sdl` selects the SDL sink if you want it.
+- **Black flicker at the top of the frame** — weak signal; `gain 40`, a better 5.8 antenna, or move closer.
+- **Choppy video or `OsO` text spamming the terminal** — the PC can't keep up at that rate; `samp-rate 12`.
 - **Picture split or rolling** — hold it with the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)); `lock` near 100% confirms a real signal.
 - **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
 - **BladeRF finds nothing** — its FPGA image must be loaded each power-on; `./setup.sh --check` reports it. Use a USB 3.0 port.
