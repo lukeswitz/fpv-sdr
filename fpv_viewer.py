@@ -54,7 +54,8 @@ class viewer(gr.top_block):
                  frame_out='/tmp/fpv_frame.png', record_path=None, live=True, dcblock=True,
                  rotate=0, oversample=2, contrast=1.0, lna=None, vga=None, amp=False,
                  standard='ntsc', display='auto', video_offset=None, video_bw=1.25e6,
-                 sync_mid=SYNC_MID, agc=False, agc_target=-20.0, agc_lna_max=32.0):
+                 sync_mid=SYNC_MID, agc=False, agc_target=-20.0, agc_lna_max=32.0,
+                 if_offset=0.0):
         gr.top_block.__init__(self, "FPV Viewer", catch_exceptions=True)
         self.samp_rate = samp_rate
         self.frequency_carrier = freq
@@ -65,12 +66,15 @@ class viewer(gr.top_block):
 
         oversample = max(1, int(oversample))
         self.cap_rate = cap_rate = samp_rate * oversample
+        video_bw = float(video_bw)
+        self.if_offset = float(if_offset)
+        if self.if_offset and abs(self.if_offset) > cap_rate / 2.0 - video_bw:
+            self.if_offset = 0.0
         self.src, self._retune = build_source(
-            cap_rate, freq, gain, sdr=sdr, dev_args=dev_args, antenna=antenna,
-            lna=lna, vga=vga, amp=amp)
+            cap_rate, freq + self.if_offset, gain, sdr=sdr, dev_args=dev_args,
+            antenna=antenna, lna=lna, vga=vga, amp=amp)
 
         title = 'FPV-SDR %.0f MHz' % (freq / 1e6)
-        video_bw = float(video_bw)
         self.low_pass_filter_1 = filter.fir_filter_fff(
             oversample,
             firdes.low_pass(1, cap_rate, video_bw, video_bw, window.WIN_HAMMING, 6.76))
@@ -79,11 +83,19 @@ class viewer(gr.top_block):
         self.NTSC_decoder_c_0 = NTSC.decoder_c(samp_rate, std_code)
 
         if sdr.lower() in UHD_ALIASES or not dcblock:
-            self.connect((self.src, 0), (self.analog_quadrature_demod_cf_0, 0))
+            tail = (self.src, 0)
         else:
             self.dcblock = filter.dc_blocker_cc(32, False)
             self.connect((self.src, 0), self.dcblock)
-            self.connect(self.dcblock, (self.analog_quadrature_demod_cf_0, 0))
+            tail = self.dcblock
+        if self.if_offset:
+            self.if_lo = analog.sig_source_c(cap_rate, analog.GR_COS_WAVE,
+                                             self.if_offset, 1.0, 0.0)
+            self.if_mix = blocks.multiply_cc(1)
+            self.connect(tail, (self.if_mix, 0))
+            self.connect(self.if_lo, (self.if_mix, 1))
+            tail = self.if_mix
+        self.connect(tail, (self.analog_quadrature_demod_cf_0, 0))
         self.connect((self.analog_quadrature_demod_cf_0, 0), (self.low_pass_filter_1, 0))
         self.sync_mid = float(sync_mid)
         self.video_offset = (level_offset(contrast, self.sync_mid)
@@ -163,7 +175,7 @@ class viewer(gr.top_block):
 
     def retune(self, freq):
         self.frequency_carrier = freq
-        self._retune(freq)
+        self._retune(freq + self.if_offset)
 
     def set_contrast(self, contrast):
         self.analog_quadrature_demod_cf_0.set_gain(quad_demod_gain(self.cap_rate) * contrast)
@@ -374,6 +386,10 @@ def main():
     ap.add_argument('--agc-lna-max', type=float, default=32.0,
                     help='ceiling on LNA so the AGC adds level with VGA instead of driving '
                          'the RF front end into compression')
+    ap.add_argument('--if-offset', type=float, default=0.0,
+                    help='tune this far off the channel and mix back in software, so the '
+                         "zero-IF DC spike and the DC blocker's notch land beside the "
+                         'carrier instead of on it (e.g. 3e6); 0 disables')
     ap.add_argument('--no-keys', action='store_true',
                     help='disable the interactive arrow-key vertical/horizontal sync tuner')
     args = ap.parse_args()
@@ -394,7 +410,7 @@ def main():
                 standard=args.standard, display=args.display,
                 video_offset=args.video_offset, video_bw=args.video_bw,
                 sync_mid=args.sync_mid, agc=args.agc, agc_target=args.agc_target,
-                agc_lna_max=args.agc_lna_max)
+                agc_lna_max=args.agc_lna_max, if_offset=args.if_offset)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()

@@ -112,6 +112,7 @@ not needed once the picture sits right.
 |-------------|-----------|
 | weak / grainy picture, black flicker at the top | `gain 40` (more sensitivity, for a distant transmitter) |
 | signal level keeps drifting as you move around | `agc on` — tracks LNA/VGA instead of holding one fixed gain |
+| vertical line or smear down the middle of the picture | `export FPV_VIEW_EXTRA="--if-offset 3e6"` — moves the receiver's DC spike off the carrier |
 | picture tears into sideways-shifted bands | noise is false-triggering the line sync — try `gain 32` first if the transmitter is close, `gain 40` if it is far |
 | choppy video or `OsO` text spamming | `samp-rate 12` (lower bandwidth so the PC keeps up) |
 | sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |
