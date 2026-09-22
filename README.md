@@ -25,7 +25,7 @@ Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in 
 ## What you need
 
 - A [supported SDR](#supported-radios): HackRF, BladeRF, B210/200mini, ANT E200, ADALM-Pluto
-- Linux/Widows/macOS machine
+- Linux / Windows / macOS machine
 
 
 ## Install
@@ -45,7 +45,7 @@ cd fpv-sdr
 - **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 
 
-> **Updating:** `git pull`, then restart the scanner— no rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
+> **Updating:** `git pull`, then restart the scanner — no rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
 
 ### Windows
 The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
@@ -57,8 +57,8 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 
 ## Run
 ```bash
-./fpv_scanner.sh                 # ANTSDR / USRP (default)
-./fpv_scanner.sh --sdr hackrf    # or --sdr bladerf
+./fpv_scanner.sh                 # detects the attached radio
+./fpv_scanner.sh --sdr hackrf    # or uhd / bladerf / pluto, to skip detection
 ./fpv_scanner.sh --standard pal  # PAL camera (625/50); default is NTSC
 ```
 
@@ -70,8 +70,8 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 | `sweep` | signal-strength table for all channels, no video |
 | `spectrum [live\|CH\|MHz]` | live spectrum in the terminal |
 | `set <CH>` / `freq <MHz>` | tune + view a channel (`set R6`) or frequency (`freq 5843`) |
-| `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) |
-| `gain <dB>` / `lna <dB>` / `vga <dB>` | RX gain (HackRF default 36; `gain` sets both LNA+VGA) |
+| `sdr <name>` | switch radio (`uhd`, `hackrf`, `bladerf`, `pluto`) — detected at startup |
+| `gain <dB>` / `lna <dB>` / `vga <dB>` | fixed RX gain, used when AGC is off (HackRF 24; `gain` sets both LNA+VGA) |
 | `agc <on\|off\|dBFS>` | auto RX gain — tracks LNA/VGA to hold the ADC level (**on by default**, target −20 dBFS; `agc off` pins a fixed gain) |
 | `samp-rate <Msps>` | capture bandwidth — auto per SDR; raise/lower if needed (`samp-rate 14`) |
 | `margin <dB>` | how far over the noise floor counts as a signal (default 12) |
@@ -99,7 +99,7 @@ When the scanner opens the video (after `scan`, `set <CH>`, or `freq <MHz>`), tu
 live from the same terminal with the arrow keys:
 
 - **↑ / ↓** — vertical hold (stop the picture rolling up/down)
-- **← / →** — horizontal hold (centre the picture)
+- **← / →** — horizontal hold (center the picture)
 - **r** reset · **q** back to the scanner menu
 
 The terminal shows the live `V` / `H` offset, the RX level in dBFS, and a `lock` meter.
@@ -113,43 +113,42 @@ not as proof of signal. To confirm a signal, use `scan` or watch the `rf:` level
 
 | If you see… | Type this |
 |-------------|-----------|
-| weak / grainy picture, black flicker at the top | `gain 40` (more sensitivity, for a distant transmitter) |
-| signal level keeps drifting as you move around | `agc on` — tracks LNA/VGA instead of holding one fixed gain |
-| vertical line or smear down the middle of the picture | `export FPV_VIEW_EXTRA="--if-offset 3e6"` — moves the receiver's DC spike off the carrier |
-| picture tears into sideways-shifted bands | noise is false-triggering the line sync — leave `agc on`, or try a better antenna / shorter range |
+| weak / grainy picture, black flicker at the top | `agc -14` (aim for a hotter level), better antenna, or move closer |
+| picture tears into sideways-shifted bands | noise is false-triggering the line sync — same fixes as above |
+| washed-out, everything mid-gray | `contrast 1.6` (more range) |
+| only part of the frame has picture, rest flat gray | `contrast 1.1` — the composite is overshooting the decoder's window |
+| vertical line or smear down the middle | `export FPV_VIEW_EXTRA="--if-offset 3e6"` — moves the receiver's DC spike off the carrier |
 | choppy video or `OsO` text spamming | `samp-rate 12` (lower bandwidth so the PC keeps up) |
 | sharp signal, want more detail | `samp-rate 16` (higher bandwidth) |
 | a known channel isn't being found | `margin 8` (detect weaker signals) |
-| washed-out, everything mid-gray | `contrast 1.6` (more range) |
-| only part of the frame has picture, rest flat gray | `contrast 1.1` — the composite is overshooting the decoder's window |
-| PAL camera | `pal` |
 | frame split by a black bar | hold **↓** until the bar rolls off the bottom |
-| flat / washed-out picture on 1.2 GHz | `contrast 4` (1.2 GHz uses ~¼ the FM deviation of 5.8 GHz, so the demod output is weaker — raise contrast) |
+| PAL camera | `pal` |
+| flat picture on 1.2/1.3 GHz | raise `contrast` — that band uses less FM deviation than 5.8 GHz, so the demod output is weaker |
 
-The radio is detected at startup, and its defaults set from that (HackRF: `samp-rate 14`, fixed gain 24
-when AGC is off); the commands above just override them. `--sdr <name>` or `FPV_SDR` skips detection.
+The radio is detected at startup and its defaults set from that (HackRF: `samp-rate 14`);
+`--sdr <name>` or `FPV_SDR` skips detection.
 
-RX gain is tracked automatically, because the best fixed gain depends on how far away the transmitter
-is: measured on one HackRF, a transmitter at 1 ft locked best at LNA/VGA 24/24 and clipped at 32/32,
-while the same transmitter at 5 ft locked best at 32/32. `agc off` pins a fixed gain if you want one.
+RX gain is tracked automatically, because the best fixed gain depends on range. Measured on one
+HackRF: a transmitter at 1 ft locked best at LNA/VGA 24/24 and clipped at 32/32, while the same
+transmitter at 5 ft locked best at 32/32. `agc off` pins the fixed `gain` value instead.
 
 `contrast` scales the demodulated composite onto the levels the decoder expects
 (`BLACK_LEVEL -0.02`, `WHITE_LEVEL 0.06` in `vendor/gr-ntsc-rc/lib/NTSC_configuration.h`). The DC
 offset that keeps the back porch above the decoder's `-0.020` sync threshold is derived from
-`contrast`, so one knob moves both. The default suits a 5.8 GHz link; for a transmitter with very
-different FM deviation, measure the back-porch and sync-tip levels and pass `--sync-mid`.
+`contrast`, so one knob moves both. For a transmitter with very different FM deviation, measure its
+back-porch and sync-tip levels and pass `--sync-mid`.
 
 ## Channels
-64 channels across 8 bands: Raceband, A, B, E, Fatshark, ImmersionRC, DJI, Low (5362–5945 MHz).
-**Type `list` to see them all.**
 
-`scan`/`sweep`/`spectrum` cover the 5.x GHz bands by default. Type **`band 12`** to point them at
-1.2/1.3 GHz (and `band 58` to switch back) — these use a different, physically larger antenna, so
-they aren't scanned together. 1.2/1.3 GHz has **no standard channel grid** (transmitters sit anywhere
-from 1010–1360 MHz), so `band 12` runs a **gapless sweep** of the whole range rather than fixed
-channels — nothing slips through the gaps. To watch one frequency, use `freq 1280` (the popular US
-channels are 1258 and 1280 MHz).
-1.2/1.3 GHz is licence-restricted in most countries (US: ham licence; illegal in much of the EU/UK).
+**5.x GHz** — 62 channels across 8 bands: Raceband, A, B, D, E, Fatshark, ImmersionRC, Low
+(5362–5945 MHz). Type `list` to see them all.
+
+**1.2/1.3 GHz** — type `band 12` to point `scan`/`sweep`/`spectrum` there, `band 58` to switch back.
+It needs a different, physically larger antenna, so the two aren't scanned together. This band has
+**no standard channel grid** — transmitters sit anywhere from 1010–1360 MHz — so `band 12` runs a
+gapless sweep of the whole range instead of fixed channels, and nothing slips between them. To watch
+one frequency, use `freq 1280`. Read [Legal](#legal--acceptable-use) first; this band is
+license-restricted in most countries.
 
 ## Supported radios
 
@@ -170,13 +169,12 @@ channels are 1258 and 1280 MHz).
 
 ## Troubleshooting
 - **Nothing happens during a search** — normal; it stays in the terminal until a signal is found.
-- **A known transmitter is ignored** — lower `margin 10`; or if the level sits near −10…−20 dBFS the
-  gain is too high (`gain 16`).
+- **A known transmitter is ignored** — lower `margin 10`.
 - **Signal found but no window** — `export DISPLAY=:0`.
 - **Window opens but stays blank (Linux)** — the gr-video-sdl sink renders black on some Linux
   desktops even with SDL's software YUV overlay forced. The viewer therefore uses `ffplay` whenever
   it is installed; `--display sdl` selects the SDL sink if you want it.
-- **Black flicker at the top of the frame** — weak signal; `gain 40`, a better 5.8 antenna, or move closer.
+- **Black flicker at the top of the frame** — weak signal; a better 5.8 GHz antenna, or move closer.
 - **Choppy video or `OsO` text spamming the terminal** — the PC can't keep up at that rate; `samp-rate 12`.
 - **Picture split or rolling** — hold it with the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)). `lock` near 100% only means the decoder is running; it reads 100% on noise too, so confirm the signal with `scan`.
 - **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
@@ -200,6 +198,29 @@ Privacy Act (18 U.S.C. § 2511) and the Communications Act (47 U.S.C. § 605);
 other jurisdictions impose their own rules. Intercepting, decoding, recording,
 or divulging communications you are not authorized to receive may be a criminal
 offense.
+
+### Band-specific rules
+
+This tool only receives. It never transmits. Even so, which frequencies you may
+legally *monitor* differs by band and by country, and the two bands it covers are
+not equivalent:
+
+- **5.x GHz** — the 5725–5875 MHz portion falls in ISM/U-NII spectrum used for
+  unlicensed devices in many countries. Parts of the range this tool can tune
+  (it reaches 5362–5945 MHz) fall outside that and may be allocated to other
+  services, including licensed and safety-of-life users. Staying inside the
+  normal FPV channel set does not by itself make monitoring lawful.
+- **1.2/1.3 GHz (`band 12`)** — restricted in most countries. In the US, 1240–1300
+  MHz is an amateur band requiring a license, and it is shared with radiolocation
+  and satellite services; only parts of it are practical for FPV. Much of the
+  1010–1360 MHz span this tool sweeps is allocated to **aeronautical
+  radionavigation**, which includes air traffic control radar and DME. In much of
+  the EU and UK, FPV use of this band is prohibited outright. Do not transmit here
+  without the appropriate license, and check your national allocation table before
+  receiving.
+
+Nothing here is a complete list. Frequency allocations are national, they change,
+and the correct source is your own regulator.
 
 This project does not endorse or support using the software to intercept,
 monitor, or interfere with systems operated by third parties — including
