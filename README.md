@@ -102,9 +102,12 @@ live from the same terminal with the arrow keys:
 - **← / →** — horizontal hold (centre the picture)
 - **r** reset · **q** back to the scanner menu
 
-The terminal shows the live `V` / `H` offset and a `lock` meter (0–100%; 0 = noise,
-~100% = real synced picture). This is a *hold* (it repositions a split/offset frame) —
-not needed once the picture sits right.
+The terminal shows the live `V` / `H` offset, the RX level in dBFS, and a `lock` meter.
+This is a *hold* (it repositions a split/offset frame) — not needed once the picture sits right.
+
+`lock` reads the decoder's sync state machine. It reaches 100% on a real picture, but it also
+reads 100% on receiver noise with no transmitter present, so treat it as "the decoder is running",
+not as proof of signal. To confirm a signal, use `scan` or watch the `rf:` level.
 
 ### Common adjustments — type these at the `>` prompt
 
@@ -175,7 +178,7 @@ channels are 1258 and 1280 MHz).
   it is installed; `--display sdl` selects the SDL sink if you want it.
 - **Black flicker at the top of the frame** — weak signal; `gain 40`, a better 5.8 antenna, or move closer.
 - **Choppy video or `OsO` text spamming the terminal** — the PC can't keep up at that rate; `samp-rate 12`.
-- **Picture split or rolling** — hold it with the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)); `lock` near 100% confirms a real signal.
+- **Picture split or rolling** — hold it with the arrow keys (see [Tuning the picture](#tuning-the-picture-vertical--horizontal-hold)). `lock` near 100% only means the decoder is running; it reads 100% on noise too, so confirm the signal with `scan`.
 - **Radio not found** — SoapySDR: `SoapySDRUtil --find`; ANTSDR: `ping 192.168.1.10 && uhd_find_devices`.
 - **BladeRF finds nothing** — its FPGA image must be loaded each power-on; `./setup.sh --check` reports it. Use a USB 3.0 port.
 
