@@ -3,8 +3,9 @@
 <img width="320" alt="fpv-sdr" src="https://github.com/user-attachments/assets/93b07877-7645-4147-af02-5f316be1cab2" />
 
 
+Receive and decode analog **1.2GHz & 5.8 GHz FPV video** with common software-defined radios. 
 
-Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in many drones and FPV cameras) with common software-defined radios. **Runs on Linux, macOS, and Windows.**
+**Runs on Linux, macOS, and Windows**
 
 </div>
 
@@ -24,8 +25,13 @@ Receive and decode analog **5.8 GHz FPV video** (the analog NTSC or PAL link in 
 
 ## What you need
 
-- A [supported SDR](#supported-radios): HackRF, BladeRF, B210/200mini, ANT E200, ADALM-Pluto
-- Linux / Windows / macOS machine
+1. A [supported SDR](#supported-radios):
+    - HackRF
+    - BladeRF
+    - B210/200mini
+    - ANTSDR
+    - ADALM-Pluto
+2. Linux / Windows / macOS machine
 
 
 ## Install
@@ -38,21 +44,26 @@ cd fpv-sdr
 > [!TIP]
 > Run `./setup.sh --check` to report what's already installed
 
-- **DragonOS** — the SDR stack (GNU Radio, SoapySDR, UHD) is already there, built into `/usr/local`,
-  and apt is pinned so it cannot be overwritten. `./setup.sh` detects that and skips it. gr-ntsc-rc is
-  not part of that stack, so setup builds it from `vendor/`.
-- **Debian / Ubuntu Linux** — `./setup.sh` installs via apt. Fedora / Arch: prints the packages to install
-- **macOS** — needs [Homebrew](https://brew.sh); `./setup.sh` does the rest.
+**DragonOS**:
+- The SDR stack is already there, built into `/usr/local`, and apt is pinned so it cannot be overwritten. **gr-ntsc-rc is not part of that, so setup builds it from `vendor/`**
 
+**Debian / Ubuntu Linux**
+-  `./setup.sh` installs via apt. Fedora / Arch: **prints the packages to install**
 
-> **Updating:** `git pull`, then restart the scanner — no rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
+**macOS**:
+- Uses [Homebrew](https://brew.sh); `./setup.sh` does the rest.
 
-### Windows
-The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
+**Windows:**
+- The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 ```powershell
 .\setup.cmd                 # install (run as Administrator the first time; reboot if asked, then run again)
 .\run.cmd --sdr hackrf      # run  (leave off --sdr for ANTSDR / USRP)
 ```
+
+### Updating: 
+- `git pull`, then restart the scanner
+> No rebuild needed (re-run `./setup.sh` only if it ever reports a missing component).
+
 
 
 ## Run
@@ -84,30 +95,27 @@ The tool runs inside Ubuntu (WSL). From the project folder in **PowerShell**:
 > Default is NTSC; use `--standard pal` (or type `pal` at the prompt) for 625/50 PAL cameras. 
 
 
-- Dial in your settings for your radio (defaults should be ok)
-- Run `scan` to search every channel; if it finds a real FPV signal it opens the video on that
-channel, use `scan loop` for constant monitoring.
-
-The `spectrum` command takes args for channel, use `spectrum live` to keep it updating:
 
 <img width="934" height="392" alt="FPV-SDR scan output" src="https://github.com/user-attachments/assets/45fb7a73-4ede-482d-9ffd-cde08f0434ab" />
 
+## Tuning
+
+- Dial in your settings for your radio (defaults should be ok)
+- Run `scan` to search every channel; if it finds a real FPV signal it opens the video on that
+channel, use `scan loop` for constant monitoring.
+- The `spectrum` command takes args for channel, use `spectrum live` to keep it updating:
+
 ### Tuning the picture (vertical / horizontal hold)
 
-A weak vertical or horizontal sync makes the picture roll or tear (common on PAL).
-When the scanner opens the video (after `scan`, `set <CH>`, or `freq <MHz>`), tune it
-live from the same terminal with the arrow keys:
+> A weak vertical or horizontal sync makes the picture roll or tear (common on PAL). When the scanner opens the video (after `scan`, `set <CH>`, or `freq <MHz>`), tune it live from the same terminal with the arrow keys:
 
 - **↑ / ↓** — vertical hold (stop the picture rolling up/down)
 - **← / →** — horizontal hold (center the picture)
 - **r** reset · **q** back to the scanner menu
 
-The terminal shows the live `V` / `H` offset, the RX level in dBFS, and a `lock` meter.
-This is a *hold* (it repositions a split/offset frame) — not needed once the picture sits right.
+- The terminal shows the live `V` / `H` offset, the RX level in dBFS, and a `lock` meter. This is a *hold* (it repositions a split/offset frame) — not needed once the picture sits right.
 
-`lock` reads the decoder's sync state machine. It reaches 100% on a real picture, but it also
-reads 100% on receiver noise with no transmitter present, so treat it as "the decoder is running",
-not as proof of signal. To confirm a signal, use `scan` or watch the `rf:` level.
+- `lock` reads the decoder's sync state machine. It reaches 100% on a real picture, but it also reads 100% on receiver noise with no transmitter present, so treat it as "the decoder is running", not as proof of signal. To confirm a signal, use `scan` or watch the `rf:` level.
 
 ### Common adjustments — type these at the `>` prompt
 
@@ -125,18 +133,6 @@ not as proof of signal. To confirm a signal, use `scan` or watch the `rf:` level
 | PAL camera | `pal` |
 | flat picture on 1.2/1.3 GHz | raise `contrast` — that band uses less FM deviation than 5.8 GHz, so the demod output is weaker |
 
-The radio is detected at startup and its defaults set from that (HackRF: `samp-rate 14`);
-`--sdr <name>` or `FPV_SDR` skips detection.
-
-RX gain is tracked automatically, because the best fixed gain depends on range. Measured on one
-HackRF: a transmitter at 1 ft locked best at LNA/VGA 24/24 and clipped at 32/32, while the same
-transmitter at 5 ft locked best at 32/32. `agc off` pins the fixed `gain` value instead.
-
-`contrast` scales the demodulated composite onto the levels the decoder expects
-(`BLACK_LEVEL -0.02`, `WHITE_LEVEL 0.06` in `vendor/gr-ntsc-rc/lib/NTSC_configuration.h`). The DC
-offset that keeps the back porch above the decoder's `-0.020` sync threshold is derived from
-`contrast`, so one knob moves both. For a transmitter with very different FM deviation, measure its
-back-porch and sync-tip levels and pass `--sync-mid`.
 
 ## Channels
 
@@ -149,6 +145,21 @@ It needs a different, physically larger antenna, so the two aren't scanned toget
 gapless sweep of the whole range instead of fixed channels, and nothing slips between them. To watch
 one frequency, use `freq 1280`. Read [Legal](#legal--acceptable-use) first; this band is
 license-restricted in most countries.
+
+### Notes
+
+- The radio is detected at startup and its defaults set from that (HackRF: `samp-rate 14`);
+`--sdr <name>` or `FPV_SDR` skips detection.
+
+- RX gain is tracked automatically, because the best fixed gain depends on range. Measured on one
+HackRF: a transmitter at 1 ft locked best at LNA/VGA 24/24 and clipped at 32/32, while the same
+transmitter at 5 ft locked best at 32/32. `agc off` pins the fixed `gain` value instead.
+
+- `contrast` scales the demodulated composite onto the levels the decoder expects
+(`BLACK_LEVEL -0.02`, `WHITE_LEVEL 0.06` in `vendor/gr-ntsc-rc/lib/NTSC_configuration.h`). The DC
+offset that keeps the back porch above the decoder's `-0.020` sync threshold is derived from
+`contrast`, so one knob moves both. For a transmitter with very different FM deviation, measure its
+back-porch and sync-tip levels and pass `--sync-mid`.
 
 ## Supported radios
 
